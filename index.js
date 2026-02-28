@@ -9,21 +9,56 @@ import { commands } from './command.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// -------- Safely extract makeWASocket --------
-let makeWASocket;
-if (typeof baileys.default === 'function') {
-    makeWASocket = baileys.default;
-} else if (typeof baileys.makeWASocket === 'function') {
-    makeWASocket = baileys.makeWASSocket; // typo? no, correct: makeWASocket
-} else if (typeof baileys === 'function') {
-    makeWASocket = baileys;
-} else if (baileys.default && typeof baileys.default.default === 'function') {
-    makeWASocket = baileys.default.default;
-} else {
-    console.error('❌ Could not find makeWASocket function. Exports:', Object.keys(baileys));
-    process.exit(1);
+// -------- Debug: log the entire baileys object structure --------
+console.log('🔍 Baileys import type:', typeof baileys);
+console.log('🔍 Baileys keys:', Object.keys(baileys));
+if (baileys.default) {
+    console.log('🔍 Baileys.default keys:', Object.keys(baileys.default));
+    if (baileys.default.default) {
+        console.log('🔍 Baileys.default.default keys:', Object.keys(baileys.default.default));
+    }
 }
 
+// -------- Safely extract makeWASocket (with multiple fallbacks) --------
+let makeWASocket;
+// Try the most common patterns
+if (typeof baileys.default === 'function') {
+    makeWASocket = baileys.default;
+    console.log('✅ Using baileys.default as makeWASocket (function)');
+} else if (typeof baileys.makeWASocket === 'function') {
+    makeWASocket = baileys.makeWASocket;
+    console.log('✅ Using baileys.makeWASocket');
+} else if (typeof baileys === 'function') {
+    makeWASocket = baileys;
+    console.log('✅ Using baileys itself as function');
+} else if (baileys.default && typeof baileys.default.makeWASocket === 'function') {
+    makeWASocket = baileys.default.makeWASocket;
+    console.log('✅ Using baileys.default.makeWASocket');
+} else if (baileys.default && baileys.default.default && typeof baileys.default.default.makeWASocket === 'function') {
+    makeWASocket = baileys.default.default.makeWASocket;
+    console.log('✅ Using baileys.default.default.makeWASocket');
+} else {
+    // Last resort: try to get it from any nested object
+    const findMakeWASocket = (obj, depth = 0) => {
+        if (depth > 3) return null;
+        if (!obj || typeof obj !== 'object') return null;
+        if (typeof obj.makeWASocket === 'function') return obj.makeWASocket;
+        for (const key of Object.keys(obj)) {
+            const found = findMakeWASocket(obj[key], depth + 1);
+            if (found) return found;
+        }
+        return null;
+    };
+    makeWASocket = findMakeWASocket(baileys);
+    if (makeWASocket) {
+        console.log('✅ Found makeWASocket via deep search');
+    } else {
+        console.error('❌ Could not find makeWASocket function. Exiting.');
+        process.exit(1);
+    }
+}
+
+// -------- Extract other utilities from the same source --------
 const useMultiFileAuthState = baileys.useMultiFileAuthState || baileys.default?.useMultiFileAuthState;
 const DisconnectReason = baileys.DisconnectReason || baileys.default?.DisconnectReason;
 const fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion || baileys.default?.fetchLatestBaileysVersion;

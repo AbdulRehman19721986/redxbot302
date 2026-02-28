@@ -9,11 +9,37 @@ import { commands } from './command.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Handle different export patterns of baileys
-const makeWASocket = baileys.default || baileys.makeWASocket;
-const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = baileys;
+// -------- DEBUG: Log the module structure (remove after confirming) ---------
+console.log('🔍 Baileys module keys:', Object.keys(baileys));
+console.log('🔍 Baileys module default:', baileys.default);
+// ---------------------------------------------------------------------------
 
-// Load all plugins
+// -------- Safely extract makeWASocket --------
+let makeWASocket;
+if (typeof baileys.default === 'function') {
+    makeWASocket = baileys.default;                         // Default export is the function
+    console.log('✅ Using baileys.default as makeWASocket');
+} else if (typeof baileys.makeWASocket === 'function') {
+    makeWASocket = baileys.makeWASocket;                    // Named export
+    console.log('✅ Using baileys.makeWASocket');
+} else if (typeof baileys === 'function') {
+    makeWASocket = baileys;                                  // Module itself is the function
+    console.log('✅ Using baileys directly');
+} else if (baileys.default && typeof baileys.default.default === 'function') {
+    makeWASocket = baileys.default.default;                  // Nested default (rare)
+    console.log('✅ Using baileys.default.default');
+} else {
+    console.error('❌ Could not find makeWASocket function. Available exports:', Object.keys(baileys));
+    process.exit(1);
+}
+
+// -------- Extract other utilities safely --------
+const useMultiFileAuthState = baileys.useMultiFileAuthState || baileys.default?.useMultiFileAuthState;
+const DisconnectReason = baileys.DisconnectReason || baileys.default?.DisconnectReason;
+const fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion || baileys.default?.fetchLatestBaileysVersion;
+const makeCacheableSignalKeyStore = baileys.makeCacheableSignalKeyStore || baileys.default?.makeCacheableSignalKeyStore;
+
+// -------- Load plugins --------
 const pluginsDir = path.join(__dirname, 'plugins');
 if (fs.existsSync(pluginsDir)) {
     const pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));

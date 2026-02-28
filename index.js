@@ -29,17 +29,15 @@ const DisconnectReason = baileys.DisconnectReason || baileys.default?.Disconnect
 const fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion || baileys.default?.fetchLatestBaileysVersion;
 const makeCacheableSignalKeyStore = baileys.makeCacheableSignalKeyStore || baileys.default?.makeCacheableSignalKeyStore;
 
-// -------- Ensure plugins folder exists and has at least one plugin --------
+// -------- Ensure plugins folder exists and load plugins --------
 const pluginsDir = path.join(__dirname, 'plugins');
 if (!fs.existsSync(pluginsDir)) {
     fs.mkdirSync(pluginsDir, { recursive: true });
     console.log('📁 Created plugins folder.');
 }
 
-// Read plugin files
 let pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
 
-// If no plugins, create a default one
 if (pluginFiles.length === 0) {
     const defaultPlugin = `import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
@@ -57,11 +55,9 @@ async (conn, mek, from, args, config) => {
 `;
     fs.writeFileSync(path.join(pluginsDir, 'main.js'), defaultPlugin);
     console.log('📝 Created default plugin: main.js');
-    // Re-read plugin files after creation
     pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
 }
 
-// -------- Load all plugins --------
 console.log(`📁 Found ${pluginFiles.length} plugin files.`);
 for (const file of pluginFiles) {
     console.log(`📦 Loading plugin: ${file}`);
@@ -86,7 +82,7 @@ console.log('🔧 Built-in test command added.');
 let cachedCreds = null;
 let currentSocket = null;
 let reconnectTimeout = null;
-let isConnecting = false; // prevent multiple simultaneous connections
+let isConnecting = false;
 
 async function startBot() {
     if (isConnecting) {
@@ -95,7 +91,6 @@ async function startBot() {
     }
     isConnecting = true;
 
-    // Clean up previous socket if exists
     if (currentSocket) {
         console.log('🧹 Closing previous socket...');
         currentSocket.ev.removeAllListeners();
@@ -103,13 +98,11 @@ async function startBot() {
         currentSocket = null;
     }
 
-    // Clear any pending reconnect timeout
     if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
         reconnectTimeout = null;
     }
 
-    // Download session only once
     if (!cachedCreds && config.SESSION_ID) {
         cachedCreds = await config.loadSessionFromMega(config.SESSION_ID);
     }
@@ -193,14 +186,16 @@ async function startBot() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // -------- Message handler --------
+    // -------- Robust Message Handler with Debug Logs --------
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const m = messages[0];
         if (!m.message) return;
 
         const from = m.key.remoteJid;
+        // Skip own messages and status broadcasts
         if (m.key.fromMe || from === 'status@broadcast') return;
 
+        // Extract message text from all possible fields
         let body = '';
         if (m.message.conversation) {
             body = m.message.conversation;
@@ -212,27 +207,41 @@ async function startBot() {
             body = m.message.videoMessage.caption;
         } else if (m.message.documentMessage?.caption) {
             body = m.message.documentMessage.caption;
+        } else if (m.message.buttonsResponseMessage?.selectedButtonId) {
+            body = m.message.buttonsResponseMessage.selectedButtonId;
+        } else if (m.message.listResponseMessage?.singleSelectReply?.selectedRowId) {
+            body = m.message.listResponseMessage.singleSelectReply.selectedRowId;
         }
 
-        if (!body) return;
+        if (!body) {
+            console.log('📭 No text body in message, type:', Object.keys(m.message)[0]);
+            return;
+        }
 
-        if (!body.startsWith(config.PREFIX)) return;
+        console.log(`📩 Received message from ${from}: "${body}"`);
+
+        // Check if message starts with prefix
+        if (!body.startsWith(config.PREFIX)) {
+            console.log(`⏭️ Message does not start with prefix "${config.PREFIX}"`);
+            return;
+        }
 
         const args = body.slice(config.PREFIX.length).trim().split(/ +/);
         const cmdName = args.shift().toLowerCase();
 
-        console.log(`📩 Command received: ${cmdName} from ${from}`);
+        console.log(`🔍 Looking for command: "${cmdName}"`);
 
         const command = commands.find(c => 
             c.pattern === cmdName || (c.alias && c.alias.includes(cmdName))
         );
 
         if (command) {
+            console.log(`⚡ Executing command: ${cmdName}`);
             try {
-                console.log(`⚡ Executing command: ${cmdName}`);
                 await command.function(sock, m, from, args, config);
+                console.log(`✅ Command ${cmdName} executed successfully.`);
             } catch (err) {
-                console.error('❌ Command error:', err);
+                console.error(`❌ Command error for ${cmdName}:`, err);
                 await sock.sendMessage(from, { text: '❌ An error occurred while executing the command.' });
             }
         } else {

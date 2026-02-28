@@ -21,11 +21,12 @@ const OWNER_NAME = process.env.OWNER_NAME || 'Abdul Rehman Rajpoot';
 const OWNER_NUMBER = process.env.OWNER_NUMBER || ''; // optional, used for self‑DM
 const SESSION_ID = process.env.SESSION_ID || ''; // optional, for MEGA session download (not used here)
 
-// ==================== LOGGER ====================
-const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport: { target: 'pino-pretty', options: { colorize: true } }
-});
+// ==================== LOGGER (simple console) ====================
+const logger = {
+  info: (...args) => console.log('[INFO]', ...args),
+  warn: (...args) => console.warn('[WARN]', ...args),
+  error: (...args) => console.error('[ERROR]', ...args),
+};
 
 // ==================== COMMAND REGISTRY ====================
 const commands = new Map();
@@ -212,14 +213,17 @@ async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
   const { version } = await fetchLatestBaileysVersion();
 
+  // Use pino for key store logger (minimal)
+  const keyStoreLogger = pino({ level: 'fatal' }); // only fatal errors
+
   const sock = makeWASocket({
     version,
     auth: {
       creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' })),
+      keys: makeCacheableSignalKeyStore(state.keys, keyStoreLogger),
     },
-    printQRInTerminal: true, // Baileys will print QR code directly
-    logger: pino({ level: 'silent' }),
+    printQRInTerminal: true,
+    logger: pino({ level: 'silent' }), // silent for socket logs
     browser: [BOT_NAME, 'Safari', '1.0.0'],
     markOnlineOnConnect: true,
     syncFullHistory: false,
@@ -244,6 +248,6 @@ function delay(ms) {
 }
 
 // Start the bot
-startBot().catch(err => logger.error('Fatal error:', err));
+startBot().catch(err => console.error('Fatal error:', err));
 
-process.on('uncaughtException', (err) => logger.error('Uncaught Exception:', err));
+process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));

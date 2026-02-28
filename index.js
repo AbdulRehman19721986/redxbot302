@@ -39,19 +39,19 @@ if (!fs.existsSync(pluginsDir)) {
 let pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
 
 if (pluginFiles.length === 0) {
-    console.log('⚠️ No plugin files found. A default plugin will be created.');
+    console.log('⚠️ No plugin files found. Creating default plugin.');
     const defaultPlugin = `import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
 const __filename = fileURLToPath(import.meta.url);
 
 cmd({
-    pattern: 'ping',
-    desc: 'Ping command',
+    pattern: 'test',
+    desc: 'Test command',
     category: 'utility',
     filename: __filename
 },
 async (conn, mek, from, args, config) => {
-    await conn.sendMessage(from, { text: 'Pong!' });
+    await conn.sendMessage(from, { text: '✅ Test command works!' });
 });
 `;
     fs.writeFileSync(path.join(pluginsDir, 'main.js'), defaultPlugin);
@@ -113,15 +113,13 @@ async function startBot() {
         markOnlineOnConnect: false,
         generateHighQualityLinkPreview: false,
         defaultQueryTimeoutMs: 60000,
-        syncFullHistory: true,                // 👈 critical: sync messages
-        getMessage: async () => undefined,    // 👈 dummy function required
-        patchMessageBeforeSending: (msg) => msg, // ensure compatibility
+        syncFullHistory: true,
+        getMessage: async () => undefined,
     });
 
     currentSocket = sock;
     isConnecting = false;
 
-    // -------- Connection update handler --------
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         
@@ -178,31 +176,20 @@ async function startBot() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // -------- Universal message handler (works with all Baileys versions) --------
-    sock.ev.on('messages.upsert', async ({ messages }) => {
-        await handleMessages(messages);
-    });
-    // Fallback for older versions
-    sock.ev.on('messages', async (messages) => {
-        await handleMessages(messages);
-    });
-    // Another fallback
-    sock.ev.on('message', async (msg) => {
-        await handleMessages([msg]);
-    });
-
-    async function handleMessages(messages) {
-        const m = messages[0];
+    // -------- Universal message handler with logging --------
+    const handleMessage = async (m) => {
         if (!m || !m.message) {
             console.log('⚠️ Message has no .message field');
             return;
         }
 
         const from = m.key.remoteJid;
-        // Skip own messages and status broadcasts
-        if (m.key.fromMe || from === 'status@broadcast') return;
+        if (m.key.fromMe || from === 'status@broadcast') {
+            console.log('⏭️ Skipping own message or status broadcast');
+            return;
+        }
 
-        // Extract text from all possible fields
+        // Extract text
         let body = '';
         if (m.message.conversation) {
             body = m.message.conversation;
@@ -212,40 +199,55 @@ async function startBot() {
             body = m.message.imageMessage.caption;
         } else if (m.message.videoMessage?.caption) {
             body = m.message.videoMessage.caption;
-        } else if (m.message.documentMessage?.caption) {
-            body = m.message.documentMessage.caption;
-        } else if (m.message.buttonsResponseMessage?.selectedButtonId) {
-            body = m.message.buttonsResponseMessage.selectedButtonId;
-        } else if (m.message.listResponseMessage?.singleSelectReply?.selectedRowId) {
-            body = m.message.listResponseMessage.singleSelectReply.selectedRowId;
-        } else if (m.message.ephemeralMessage?.message?.conversation) {
-            body = m.message.ephemeralMessage.message.conversation;
-        } else if (m.message.ephemeralMessage?.message?.extendedTextMessage?.text) {
-            body = m.message.ephemeralMessage.message.extendedTextMessage.text;
+        } else {
+            console.log('📭 No extractable text in message');
+            return;
         }
-
-        if (!body) return;
 
         console.log(`📩 Received from ${from}: "${body}"`);
 
-        if (!body.startsWith(config.PREFIX)) return;
+        // Check prefix
+        if (!body.startsWith(config.PREFIX)) {
+            console.log(`⏭️ Message does not start with prefix "${config.PREFIX}"`);
+            return;
+        }
 
         const args = body.slice(config.PREFIX.length).trim().split(/ +/);
         const cmdName = args.shift().toLowerCase();
+        console.log(`🔍 Looking for command: "${cmdName}"`);
 
         const command = commands.find(c => 
             c.pattern === cmdName || (c.alias && c.alias.includes(cmdName))
         );
 
         if (command) {
+            console.log(`⚡ Executing command: ${cmdName}`);
             try {
                 await command.function(sock, m, from, args, config);
+                console.log(`✅ Command ${cmdName} executed successfully.`);
             } catch (err) {
-                console.error('❌ Command error:', err);
+                console.error(`❌ Command error for ${cmdName}:`, err);
                 await sock.sendMessage(from, { text: '❌ An error occurred while executing the command.' });
             }
+        } else {
+            console.log(`❓ Unknown command: ${cmdName}`);
         }
-    }
+    };
+
+    // Listen to all possible message events
+    sock.ev.on('messages.upsert', async ({ messages }) => {
+        for (const m of messages) {
+            await handleMessage(m);
+        }
+    });
+    sock.ev.on('messages', async (messages) => {
+        for (const m of messages) {
+            await handleMessage(m);
+        }
+    });
+    sock.ev.on('message', async (m) => {
+        await handleMessage(m);
+    });
 }
 
 startBot().catch(err => console.error('Fatal error:', err));

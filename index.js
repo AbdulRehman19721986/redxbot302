@@ -1,15 +1,13 @@
 /**
  * REDXBOT – WhatsApp Bot
  * Owner: Abdul Rehman Rajpoot
- * Version: 2.0.0
+ * Version: 3.0.0
  * 
- * Connects using a SESSION_ID from MEGA (downloaded automatically).
- * Environment variables:
- *   SESSION_ID – MEGA file ID (e.g., abc123#key) – required
- *   BOT_NAME – bot display name (default: REDXBOT)
- *   PREFIX – command prefix (default: !)
- *   OWNER_NAME – your name (default: Abdul Rehman Rajpoot)
- *   OWNER_NUMBER – your WhatsApp number (for welcome message)
+ * Features:
+ * - Downloads session from MEGA using SESSION_ID
+ * - Sends a heavy, professional welcome message with owner info and links
+ * - Responds to .ping and ping (with and without prefix)
+ * - Includes a test command
  */
 
 import * as baileys from '@whiskeysockets/baileys';
@@ -18,7 +16,7 @@ import { Boom } from '@hapi/boom';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { File } from 'megajs'; // for MEGA download
+import { File } from 'megajs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,16 +24,22 @@ const __dirname = path.dirname(__filename);
 // ==================== CONFIGURATION (from environment) ====================
 const SESSION_ID = process.env.SESSION_ID || '';
 const BOT_NAME = process.env.BOT_NAME || 'REDXBOT';
-const PREFIX = process.env.PREFIX || '!';
+const PREFIX = process.env.PREFIX || '.';
 const OWNER_NAME = process.env.OWNER_NAME || 'Abdul Rehman Rajpoot';
-const OWNER_NUMBER = process.env.OWNER_NUMBER || ''; // optional, for welcome DM
+const OWNER_NUMBER = process.env.OWNER_NUMBER || ''; // WhatsApp number of the owner (for welcome DM)
+const GITHUB_URL = process.env.GITHUB_URL || 'https://github.com/AbdulRehman19721986/REDXBOT-MD';
+const WHATSAPP_GROUP = process.env.WHATSAPP_GROUP || 'https://chat.whatsapp.com/LhSmx2SeXX75r8I2bxsNDo';
+const WHATSAPP_CHANNEL = process.env.WHATSAPP_CHANNEL || 'https://whatsapp.com/channel/0029VbCPnYf96H4SNehkev10';
+const TELEGRAM_LINK = process.env.TELEGRAM_LINK || 'https://t.me/TeamRedxhacker2';
+const YOUTUBE_LINK = process.env.YOUTUBE_LINK || 'https://youtube.com/@rootmindtech';
+const BOT_PIC_URL = process.env.BOT_PIC_URL || 'https://image2url.com/r2/default/images/1772252008593-2690797c-4bd7-431e-b1f7-0f6ea21f7320.jpg';
 
 if (!SESSION_ID) {
   console.error('❌ SESSION_ID environment variable is required.');
   process.exit(1);
 }
 
-// ==================== LOGGER (simple console) ====================
+// ==================== LOGGER ====================
 const logger = {
   info: (...args) => console.log('[INFO]', ...args),
   warn: (...args) => console.warn('[WARN]', ...args),
@@ -69,22 +73,30 @@ async function loadSessionFromMega(sessionId) {
   }
 }
 
-// ==================== COMMAND REGISTRY ====================
+// ==================== COMMAND HANDLING ====================
 const commands = new Map();
 
+// Helper to register commands
 function registerCommand(name, description, execute) {
   commands.set(name, { description, execute });
 }
 
-// ----- built‑in commands -----
-registerCommand('ping', 'Check bot response time.', async (sock, from, args) => {
+// ----- ping command (works with and without prefix) -----
+// The message handler will check for prefix first; if not, it will still trigger on "ping"
+registerCommand('ping', 'Check bot response time.', async (sock, from, args, msg) => {
   const start = Date.now();
   await sock.sendMessage(from, { text: 'Pong! 🏓' });
   const latency = Date.now() - start;
   await sock.sendMessage(from, { text: `Response time: ${latency}ms` });
 });
 
-registerCommand('menu', 'Show all commands.', async (sock, from, args) => {
+// ----- test command -----
+registerCommand('test', 'Test if bot is working.', async (sock, from, args, msg) => {
+  await sock.sendMessage(from, { text: '✅ Bot is working properly!' });
+});
+
+// ----- menu command (optional, but nice) -----
+registerCommand('menu', 'Show all commands.', async (sock, from, args, msg) => {
   const cmdList = Array.from(commands.entries())
     .map(([name, cmd]) => `${PREFIX}${name} – ${cmd.description}`)
     .join('\n');
@@ -96,15 +108,52 @@ ${cmdList}
   await sock.sendMessage(from, { text: menuText });
 });
 
-registerCommand('test', 'Test if bot is working.', async (sock, from, args) => {
-  await sock.sendMessage(from, { text: '✅ Bot is working!' });
-});
+// ==================== WELCOME MESSAGE (heavy, with image) ====================
+async function sendWelcomeMessage(sock) {
+  if (!OWNER_NUMBER) {
+    logger.warn('OWNER_NUMBER not set – skipping welcome message.');
+    return;
+  }
+  const ownerJid = OWNER_NUMBER + '@s.whatsapp.net';
+  try {
+    // First, fetch the image buffer
+    const response = await fetch(BOT_PIC_URL);
+    const buffer = await response.buffer();
 
-registerCommand('hi', 'Say hello.', async (sock, from, args) => {
-  await sock.sendMessage(from, { text: `Hello! 👋 I am ${BOT_NAME}.` });
-});
+    const welcomeText = `
+╔══════════════════════╗
+║   🔥 *${BOT_NAME}* 🔥   ║
+╚══════════════════════╝
 
-// Add more commands as needed...
+✅ *Bot is now online!*
+
+📌 *Prefix:* ${PREFIX}
+👑 *Owner:* ${OWNER_NAME}
+👤 *Mode:* Public
+
+🔗 *Important Links:*
+• GitHub: ${GITHUB_URL}
+• WhatsApp Channel: ${WHATSAPP_CHANNEL}
+• WhatsApp Group: ${WHATSAPP_GROUP}
+• Telegram: ${TELEGRAM_LINK}
+• YouTube: ${YOUTUBE_LINK}
+
+✨ *Thank you for using ${BOT_NAME}!* ✨
+    `;
+
+    await sock.sendMessage(ownerJid, {
+      image: buffer,
+      caption: welcomeText
+    });
+    logger.info('📨 Heavy welcome message sent to owner.');
+  } catch (err) {
+    logger.error('Failed to send welcome message:', err);
+    // Fallback: send text only
+    try {
+      await sock.sendMessage(ownerJid, { text: welcomeText.replace(/[│╔╗╚╝]/g, '') });
+    } catch (e) {}
+  }
+}
 
 // ==================== EVENT HANDLERS ====================
 
@@ -118,26 +167,42 @@ async function handleMessagesUpsert(sock, { messages }) {
   else if (msg.message.extendedTextMessage?.text) text = msg.message.extendedTextMessage.text;
   else return;
 
+  // Trim and lowercase for matching
+  const trimmedText = text.trim().toLowerCase();
+
+  // Handle direct "ping" without prefix
+  if (trimmedText === 'ping') {
+    logger.info(`Direct ping from ${from}`);
+    const start = Date.now();
+    await sock.sendMessage(from, { text: 'Pong! 🏓 (direct)' });
+    const latency = Date.now() - start;
+    await sock.sendMessage(from, { text: `Response time: ${latency}ms` });
+    return;
+  }
+
+  // Handle prefixed commands
   if (!text.startsWith(PREFIX)) return;
-  logger.info(`Received command from ${from}: ${text}`);
-  const [cmdName, ...args] = text.slice(PREFIX.length).trim().split(' ');
-  const command = commands.get(cmdName.toLowerCase());
+  const args = text.slice(PREFIX.length).trim().split(' ');
+  const cmdName = args.shift().toLowerCase();
+  logger.info(`Command received: ${cmdName} from ${from}`);
+
+  const command = commands.get(cmdName);
   if (command) {
     try {
-      await command.execute(sock, from, args);
-      logger.info(`Command executed: ${cmdName}`);
+      await command.execute(sock, from, args, msg);
+      logger.info(`✅ Command ${cmdName} executed.`);
     } catch (err) {
-      logger.error(`Command error (${cmdName}):`, err);
+      logger.error(`❌ Command error (${cmdName}):`, err);
       await sock.sendMessage(from, { text: '❌ An error occurred while executing the command.' });
     }
+  } else {
+    await sock.sendMessage(from, { text: `❌ Unknown command. Use ${PREFIX}menu to see available commands.` });
   }
 }
 
 // ----- connection.update (connect, disconnect) -----
 async function handleConnectionUpdate(sock, update, startBot) {
-  const { connection, lastDisconnect, qr } = update;
-  // We ignore QR because we use session ID
-  if (qr) return;
+  const { connection, lastDisconnect } = update;
 
   if (connection === "close") {
     const reasonCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
@@ -151,18 +216,7 @@ async function handleConnectionUpdate(sock, update, startBot) {
     }
   } else if (connection === "open") {
     logger.info("✅ Bot connected to WhatsApp!");
-    // Send welcome message to owner if number provided
-    if (OWNER_NUMBER) {
-      try {
-        const ownerJid = OWNER_NUMBER + '@s.whatsapp.net';
-        await sock.sendMessage(ownerJid, {
-          text: `✅ *${BOT_NAME} is now online!*\n\nOwner: ${OWNER_NAME}\nPrefix: ${PREFIX}\n\nThank you for using ${BOT_NAME}!`
-        });
-        logger.info('📨 Welcome message sent to owner.');
-      } catch (err) {
-        logger.error('Failed to send welcome message:', err);
-      }
-    }
+    await sendWelcomeMessage(sock);
   }
 }
 
@@ -186,7 +240,7 @@ const DisconnectReason = baileys.DisconnectReason || baileys.default?.Disconnect
 let currentSocket = null;
 let reconnectTimeout = null;
 let isConnecting = false;
-let cachedCreds = null; // store downloaded session
+let cachedCreds = null;
 
 async function startBot() {
   if (isConnecting) return;
@@ -199,7 +253,7 @@ async function startBot() {
   }
   if (reconnectTimeout) clearTimeout(reconnectTimeout);
 
-  // Download session from MEGA only once
+  // Download session from MEGA (only once)
   if (!cachedCreds) {
     cachedCreds = await loadSessionFromMega(SESSION_ID);
   }
@@ -210,7 +264,7 @@ async function startBot() {
 
   const { version } = await fetchLatestBaileysVersion();
 
-  // Use pino for key store logger (minimal)
+  // Minimal pino logger for internal use
   const keyStoreLogger = pino({ level: 'fatal' });
 
   const sock = makeWASocket({
@@ -236,12 +290,10 @@ async function startBot() {
   sock.ev.on('messages.upsert', (data) => handleMessagesUpsert(sock, data));
 }
 
-// Helper delay
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Start the bot
 startBot().catch(err => logger.error('Fatal error:', err));
 
 process.on('uncaughtException', (err) => logger.error('Uncaught Exception:', err));

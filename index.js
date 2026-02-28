@@ -1,7 +1,7 @@
 /**
  * REDXBOT – WhatsApp Bot
  * Owner: Abdul Rehman Rajpoot
- * Version: 3.1.0
+ * Version: 3.2.0
  */
 
 import * as baileys from '@whiskeysockets/baileys';
@@ -151,7 +151,6 @@ async function sendWelcomeMessage(sock) {
     logger.info('📨 Heavy welcome message sent to owner.');
   } catch (err) {
     logger.error('Failed to send welcome message with image:', err);
-    // Fallback text only
     const plainText = welcomeText.replace(/[│╔╗╚╝]/g, '');
     try {
       await sock.sendMessage(ownerJid, { text: plainText });
@@ -174,7 +173,6 @@ async function handleMessagesUpsert(sock, { messages }) {
 
   const trimmedText = text.trim().toLowerCase();
 
-  // Direct "ping" without prefix
   if (trimmedText === 'ping') {
     logger.info(`Direct ping from ${from}`);
     const start = Date.now();
@@ -215,7 +213,7 @@ async function clearSessionFolder() {
 async function handleConnectionUpdate(sock, update, startBot) {
   const { connection, lastDisconnect, qr } = update;
 
-  if (qr) return; // ignore QR, we use session ID
+  if (qr) return; // we don't use QR
 
   if (connection === "close") {
     const error = lastDisconnect?.error;
@@ -223,7 +221,6 @@ async function handleConnectionUpdate(sock, update, startBot) {
     const message = error?.message || 'Unknown error';
     logger.warn(`Connection closed. Status code: ${statusCode}, Reason: ${message}`);
 
-    // Conflict (440) or logged out (401) – force clear and exit
     if (statusCode === 440 || statusCode === 401) {
       logger.error(`
 ╔════════════════════════════════════════════════════════╗
@@ -241,7 +238,6 @@ async function handleConnectionUpdate(sock, update, startBot) {
       await clearSessionFolder();
       process.exit(1); // Railway will restart
     } else {
-      // Other disconnections – attempt reconnect
       await delay(5000);
       startBot();
     }

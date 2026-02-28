@@ -14,7 +14,7 @@ let makeWASocket;
 if (typeof baileys.default === 'function') {
     makeWASocket = baileys.default;
 } else if (typeof baileys.makeWASocket === 'function') {
-    makeWASocket = baileys.makeWASocket;
+    makeWASocket = baileys.makeWASSocket; // typo? no, correct: makeWASocket
 } else if (typeof baileys === 'function') {
     makeWASocket = baileys;
 } else if (baileys.default && typeof baileys.default.default === 'function') {
@@ -66,11 +66,34 @@ for (const file of pluginFiles) {
 }
 console.log(`✅ Loaded ${commands.length} commands.`);
 
+// -------- Add a built-in test command (always available) --------
+import { cmd } from './command.js';
+cmd({
+    pattern: 'test',
+    desc: 'Test if bot is working',
+    category: 'debug',
+    filename: 'builtin'
+},
+async (conn, mek, from, args, config) => {
+    await conn.sendMessage(from, { text: '✅ Bot is working! Commands are active.' });
+});
+console.log('🔧 Built-in test command added.');
+
 // -------- Global variables --------
 let cachedCreds = null;
 let currentSocket = null;
 let reconnectTimeout = null;
 let isConnecting = false;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+
+async function clearSessionFolder() {
+    const sessionPath = path.join(__dirname, 'sessions');
+    if (fs.existsSync(sessionPath)) {
+        fs.rmSync(sessionPath, { recursive: true, force: true });
+        console.log('🧹 Cleared session folder.');
+    }
+}
 
 async function startBot() {
     if (isConnecting) {
@@ -91,6 +114,7 @@ async function startBot() {
         reconnectTimeout = null;
     }
 
+    // Download session only once
     if (!cachedCreds && config.SESSION_ID) {
         cachedCreds = await config.loadSessionFromMega(config.SESSION_ID);
     }
@@ -129,6 +153,7 @@ async function startBot() {
 
         if (connection === 'open') {
             console.log('✅ Bot connected to WhatsApp!');
+            reconnectAttempts = 0; // reset on successful connection
             
             try {
                 const ownerJid = config.OWNER_NUMBER + '@s.whatsapp.net';
@@ -163,90 +188,69 @@ async function startBot() {
             console.log(`❌ Connection closed. Status code: ${statusCode}, Reason: ${errorMessage}`);
 
             if (statusCode === DisconnectReason.loggedOut) {
-                console.log('❌ Logged out. Delete sessions folder and restart.');
-                process.exit(1);
+                console.log('❌ Logged out. Clearing session folder and restarting.');
+                await clearSessionFolder();
+                cachedCreds = null; // force re-download
+                process.exit(1); // Railway will restart
             } else {
-                console.log('🔁 Reconnecting in 5 seconds...');
+                reconnectAttempts++;
+                if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+                    console.log('❌ Max reconnection attempts reached. Exiting.');
+                    process.exit(1);
+                }
+                const delay = Math.min(5000 * reconnectAttempts, 30000); // exponential backoff
+                console.log(`🔁 Reconnecting in ${delay/1000} seconds... (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
                 reconnectTimeout = setTimeout(() => {
                     startBot().catch(err => console.error('Reconnect error:', err));
-                }, 5000);
+                }, delay);
             }
         }
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // -------- Universal message handler with logging --------
-    const handleMessage = async (m) => {
-        if (!m || !m.message) {
-            console.log('⚠️ Message has no .message field');
-            return;
-        }
-
-        const from = m.key.remoteJid;
-        if (m.key.fromMe || from === 'status@broadcast') {
-            console.log('⏭️ Skipping own message or status broadcast');
-            return;
-        }
-
-        // Extract text
-        let body = '';
-        if (m.message.conversation) {
-            body = m.message.conversation;
-        } else if (m.message.extendedTextMessage?.text) {
-            body = m.message.extendedTextMessage.text;
-        } else if (m.message.imageMessage?.caption) {
-            body = m.message.imageMessage.caption;
-        } else if (m.message.videoMessage?.caption) {
-            body = m.message.videoMessage.caption;
-        } else {
-            console.log('📭 No extractable text in message');
-            return;
-        }
-
-        console.log(`📩 Received from ${from}: "${body}"`);
-
-        // Check prefix
-        if (!body.startsWith(config.PREFIX)) {
-            console.log(`⏭️ Message does not start with prefix "${config.PREFIX}"`);
-            return;
-        }
-
-        const args = body.slice(config.PREFIX.length).trim().split(/ +/);
-        const cmdName = args.shift().toLowerCase();
-        console.log(`🔍 Looking for command: "${cmdName}"`);
-
-        const command = commands.find(c => 
-            c.pattern === cmdName || (c.alias && c.alias.includes(cmdName))
-        );
-
-        if (command) {
-            console.log(`⚡ Executing command: ${cmdName}`);
-            try {
-                await command.function(sock, m, from, args, config);
-                console.log(`✅ Command ${cmdName} executed successfully.`);
-            } catch (err) {
-                console.error(`❌ Command error for ${cmdName}:`, err);
-                await sock.sendMessage(from, { text: '❌ An error occurred while executing the command.' });
-            }
-        } else {
-            console.log(`❓ Unknown command: ${cmdName}`);
-        }
-    };
-
-    // Listen to all possible message events
+    // -------- Message handler --------
     sock.ev.on('messages.upsert', async ({ messages }) => {
         for (const m of messages) {
-            await handleMessage(m);
+            if (!m.message) continue;
+            const from = m.key.remoteJid;
+            if (m.key.fromMe || from === 'status@broadcast') continue;
+
+            let body = '';
+            if (m.message.conversation) body = m.message.conversation;
+            else if (m.message.extendedTextMessage?.text) body = m.message.extendedTextMessage.text;
+            else if (m.message.imageMessage?.caption) body = m.message.imageMessage.caption;
+            else if (m.message.videoMessage?.caption) body = m.message.videoMessage.caption;
+            else continue;
+
+            console.log(`📩 Received from ${from}: "${body}"`);
+
+            if (!body.startsWith(config.PREFIX)) {
+                console.log(`⏭️ No prefix "${config.PREFIX}"`);
+                continue;
+            }
+
+            const args = body.slice(config.PREFIX.length).trim().split(/ +/);
+            const cmdName = args.shift().toLowerCase();
+            console.log(`🔍 Looking for command: "${cmdName}"`);
+
+            const command = commands.find(c => 
+                c.pattern === cmdName || (c.alias && c.alias.includes(cmdName))
+            );
+
+            if (command) {
+                console.log(`⚡ Executing command: ${cmdName}`);
+                try {
+                    await command.function(sock, m, from, args, config);
+                    console.log(`✅ Command ${cmdName} executed successfully.`);
+                } catch (err) {
+                    console.error(`❌ Command error for ${cmdName}:`, err);
+                    await sock.sendMessage(from, { text: '❌ An error occurred while executing the command.' });
+                }
+            } else {
+                console.log(`❓ Unknown command: ${cmdName}`);
+            }
         }
-    });
-    sock.ev.on('messages', async (messages) => {
-        for (const m of messages) {
-            await handleMessage(m);
-        }
-    });
-    sock.ev.on('message', async (m) => {
-        await handleMessage(m);
     });
 }
 

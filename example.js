@@ -1,10 +1,10 @@
 import { fileURLToPath } from 'url';
-import path from 'path';
 import { cmd } from '../command.js';
 import axios from 'axios';
 import ytSearch from 'yt-search';
 import { Sticker, StickerTypes } from 'wa-sticker-formatter';
 import fs from 'fs';
+import path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

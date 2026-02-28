@@ -9,7 +9,7 @@ import { commands } from './command.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// -------- Extract makeWASocket (from your logs, it's under baileys.default.makeWASocket) --------
+// -------- Extract makeWASocket --------
 let makeWASocket;
 if (baileys.default && typeof baileys.default.makeWASocket === 'function') {
     makeWASocket = baileys.default.makeWASocket;
@@ -29,10 +29,7 @@ const makeCacheableSignalKeyStore = baileys.makeCacheableSignalKeyStore || baile
 
 // -------- Load plugins --------
 const pluginsDir = path.join(__dirname, 'plugins');
-if (!fs.existsSync(pluginsDir)) {
-    fs.mkdirSync(pluginsDir, { recursive: true });
-    console.log('📁 Created plugins folder.');
-}
+if (!fs.existsSync(pluginsDir)) fs.mkdirSync(pluginsDir, { recursive: true });
 
 let pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
 
@@ -53,7 +50,6 @@ async (conn, mek, from, args, config) => {
 });
 `;
     fs.writeFileSync(path.join(pluginsDir, 'main.js'), defaultPlugin);
-    console.log('📝 Created default plugin: main.js');
     pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
 }
 
@@ -178,20 +174,22 @@ async function startBot() {
                 process.exit(1);
             } else if (statusCode === 440) { // Conflict
                 console.log(`
-⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
-❌ CONFLICT DETECTED (Status 440)
-   Another device is using the same WhatsApp number.
-   The bot cannot receive messages while another session is active.
-
-✅ SOLUTION:
-   1. Open WhatsApp on your phone.
-   2. Go to Settings → Linked Devices.
-   3. Log out from ALL devices (Web, Desktop, etc.).
-   4. If your phone itself is the primary device, you MUST use a different number for the bot.
-   5. After logging out, restart the bot.
-
-   If you cannot log out, generate a new SESSION_ID with a different phone number.
-⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️`);
+╔════════════════════════════════════════════════════════════╗
+║                        ❗ CONFLICT ❗                        ║
+╠════════════════════════════════════════════════════════════╣
+║ Another device is using the same WhatsApp number.          ║
+║ The bot cannot receive messages while another session      ║
+║ is active.                                                 ║
+╟────────────────────────────────────────────────────────────╢
+║ ✅ FIX:                                                    ║
+║ 1. Open WhatsApp on your phone.                            ║
+║ 2. Go to Settings → Linked Devices.                        ║
+║ 3. Log out from ALL devices (Web, Desktop, etc.).         ║
+║ 4. Restart this bot.                                       ║
+║                                                            ║
+║ If the problem persists, generate a fresh SESSION_ID      ║
+║ using a different phone number.                            ║
+╚════════════════════════════════════════════════════════════╝`);
                 await clearSessionFolder();
                 cachedCreds = null;
                 process.exit(1);

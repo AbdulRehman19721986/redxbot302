@@ -130,6 +130,13 @@ async function startBot() {
     currentSocket = sock;
     isConnecting = false;
 
+    // -------- Log ALL events (debug) --------
+    sock.ev.on('*', (event, data) => {
+        if (event !== 'messages.upsert' && event !== 'connection.update') {
+            console.log(`📡 Event: ${event}`);
+        }
+    });
+
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         
@@ -188,6 +195,7 @@ async function startBot() {
 
     // -------- Message Handler with Full Debugging --------
     sock.ev.on('messages.upsert', async ({ messages }) => {
+        console.log('📥 messages.upsert event triggered!');
         const m = messages[0];
         if (!m.message) {
             console.log('⚠️ Message has no .message field');
@@ -231,6 +239,10 @@ async function startBot() {
             body = m.message.ephemeralMessage.message.conversation;
         } else if (m.message.ephemeralMessage?.message?.extendedTextMessage?.text) {
             body = m.message.ephemeralMessage.message.extendedTextMessage.text;
+        } else {
+            // If we can't extract, log the full message for debugging
+            console.log('📭 Unknown message structure:', JSON.stringify(m.message, null, 2));
+            return;
         }
 
         if (!body) {

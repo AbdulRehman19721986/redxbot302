@@ -3,10 +3,6 @@ import dotenv from 'dotenv';
 
 if (fs.existsSync('config.env')) dotenv.config({ path: './config.env' });
 
-function convertToBool(text, fault = 'true') {
-    return text === fault ? true : false;
-}
-
 const config = {
     // Required
     SESSION_ID: process.env.SESSION_ID || '',
@@ -51,4 +47,3 @@ const config = {
 };
 
 export default config;
-

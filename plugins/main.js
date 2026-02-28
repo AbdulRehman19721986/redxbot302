@@ -16,7 +16,7 @@ function runtime(seconds) {
     return (d ? d + 'd ' : '') + (h ? h + 'h ' : '') + (m ? m + 'm ' : '') + (s ? s + 's' : '');
 }
 
-let botMode = 'public'; // default
+let botMode = 'public';
 
 // ==================== COMMANDS ====================
 
@@ -262,7 +262,7 @@ async (conn, mek, from, args, config) => {
     process.exit(0);
 });
 
-// Group admin commands (add more as needed)
+// Group admin commands
 cmd({
     pattern: 'kick',
     desc: 'Remove member from group',

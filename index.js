@@ -54,18 +54,19 @@ cmd({
 async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: '✅ Bot is working! Commands are active.' });
 });
-
 console.log('🔧 Built-in test command added.');
 
-// -------- Start bot --------
+// -------- Global variable to cache session after first download --------
+let cachedCreds = null;
+
 async function startBot() {
-    let creds = null;
-    if (config.SESSION_ID) {
-        creds = await config.loadSessionFromMega(config.SESSION_ID);
+    // Download session only if not cached
+    if (!cachedCreds && config.SESSION_ID) {
+        cachedCreds = await config.loadSessionFromMega(config.SESSION_ID);
     }
 
     const { state, saveCreds } = await useMultiFileAuthState('./sessions', {
-        creds: creds || undefined
+        creds: cachedCreds || undefined
     });
 
     const { version } = await fetchLatestBaileysVersion();
@@ -76,7 +77,7 @@ async function startBot() {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' })),
         },
-        printQRInTerminal: !creds,
+        printQRInTerminal: !cachedCreds,
         logger: pino({ level: 'silent' }),
         browser: ['REDXBOT302', 'Safari', '1.0.0'],
         markOnlineOnConnect: false,
@@ -86,15 +87,18 @@ async function startBot() {
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
-        if (qr && !creds) {
+        
+        if (qr && !cachedCreds) {
             console.log('📱 QR Code generated. Scan with WhatsApp.');
         }
+
         if (connection === 'open') {
             console.log('✅ Bot connected to WhatsApp!');
-            const ownerJid = config.OWNER_NUMBER + '@s.whatsapp.net';
             
-            // Professional welcome message
-            const welcomeMessage = `╔══════════════════════╗
+            // Send welcome message with error handling
+            try {
+                const ownerJid = config.OWNER_NUMBER + '@s.whatsapp.net';
+                const welcomeMessage = `╔══════════════════════╗
 ║   🔥 *REDXBOT302* 🔥   ║
 ╚══════════════════════╝
 
@@ -112,16 +116,25 @@ async function startBot() {
 
 ✨ *Thank you for using REDXBOT!* ✨`;
 
-            await sock.sendMessage(ownerJid, { text: welcomeMessage });
+                await sock.sendMessage(ownerJid, { text: welcomeMessage });
+                console.log('📨 Welcome message sent to owner.');
+            } catch (err) {
+                console.error('❌ Failed to send welcome message:', err);
+            }
         }
+
         if (connection === 'close') {
-            const reason = new Boom(lastDisconnect?.error).output.statusCode;
-            if (reason === DisconnectReason.loggedOut) {
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
+            console.log(`❌ Connection closed. Status code: ${statusCode}, Reason: ${errorMessage}`);
+
+            if (statusCode === DisconnectReason.loggedOut) {
                 console.log('❌ Logged out. Delete sessions folder and restart.');
                 process.exit(1);
             } else {
-                console.log('🔁 Reconnecting...');
-                startBot();
+                console.log('🔁 Reconnecting in 5 seconds...');
+                // Wait a bit before reconnecting to avoid rapid loops
+                setTimeout(() => startBot(), 5000);
             }
         }
     });
@@ -134,10 +147,8 @@ async function startBot() {
         if (!m.message) return;
 
         const from = m.key.remoteJid;
-        // Skip own messages and status broadcasts
         if (m.key.fromMe || from === 'status@broadcast') return;
 
-        // Extract text body from different message types
         let body = '';
         if (m.message.conversation) {
             body = m.message.conversation;
@@ -153,17 +164,13 @@ async function startBot() {
 
         if (!body) return;
 
-        // Check if message starts with prefix
         if (!body.startsWith(config.PREFIX)) return;
 
-        // Parse command
         const args = body.slice(config.PREFIX.length).trim().split(/ +/);
         const cmdName = args.shift().toLowerCase();
 
-        // Debug log
         console.log(`📩 Command received: ${cmdName} from ${from}`);
 
-        // Find command
         const command = commands.find(c => 
             c.pattern === cmdName || (c.alias && c.alias.includes(cmdName))
         );

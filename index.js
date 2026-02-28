@@ -36,8 +36,10 @@ if (!fs.existsSync(pluginsDir)) {
     console.log('📁 Created plugins folder.');
 }
 
-// Write default plugin file if plugins folder is empty
-const pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
+// Read plugin files
+let pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
+
+// If no plugins, create a default one
 if (pluginFiles.length === 0) {
     const defaultPlugin = `import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
@@ -53,8 +55,10 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: 'Pong!' });
 });
 `;
-    fs.writeFileSync(path.join(pluginsDir, 'example.js'), defaultPlugin);
-    console.log('📝 Created default plugin example.js');
+    fs.writeFileSync(path.join(pluginsDir, 'main.js'), defaultPlugin);
+    console.log('📝 Created default plugin: main.js');
+    // Re-read plugin files after creation
+    pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
 }
 
 // -------- Load all plugins --------
@@ -82,13 +86,20 @@ console.log('🔧 Built-in test command added.');
 let cachedCreds = null;
 let currentSocket = null;
 let reconnectTimeout = null;
+let isConnecting = false; // prevent multiple simultaneous connections
 
 async function startBot() {
+    if (isConnecting) {
+        console.log('⏳ Already connecting, waiting...');
+        return;
+    }
+    isConnecting = true;
+
     // Clean up previous socket if exists
     if (currentSocket) {
         console.log('🧹 Closing previous socket...');
         currentSocket.ev.removeAllListeners();
-        await currentSocket.end();
+        await currentSocket.end().catch(() => {});
         currentSocket = null;
     }
 
@@ -124,6 +135,7 @@ async function startBot() {
     });
 
     currentSocket = sock;
+    isConnecting = false;
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -172,7 +184,9 @@ async function startBot() {
                 process.exit(1);
             } else {
                 console.log('🔁 Reconnecting in 5 seconds...');
-                reconnectTimeout = setTimeout(() => startBot(), 5000);
+                reconnectTimeout = setTimeout(() => {
+                    startBot().catch(err => console.error('Reconnect error:', err));
+                }, 5000);
             }
         }
     });
@@ -227,7 +241,7 @@ async function startBot() {
     });
 }
 
-startBot();
+startBot().catch(err => console.error('Fatal error:', err));
 
 process.on('uncaughtException', (err) => {
     console.error('❌ Uncaught Exception:', err);

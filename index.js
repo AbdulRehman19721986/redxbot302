@@ -125,6 +125,8 @@ async function startBot() {
         markOnlineOnConnect: false,
         generateHighQualityLinkPreview: false,
         defaultQueryTimeoutMs: 60000,
+        syncFullHistory: true,                // 👈 important: sync messages
+        getMessage: async () => undefined,    // 👈 required to avoid errors
     });
 
     currentSocket = sock;
@@ -132,7 +134,7 @@ async function startBot() {
 
     // -------- Log ALL events (debug) --------
     sock.ev.on('*', (event, data) => {
-        if (event !== 'messages.upsert' && event !== 'connection.update') {
+        if (event !== 'messages.upsert' && event !== 'connection.update' && event !== 'creds.update') {
             console.log(`📡 Event: ${event}`);
         }
     });

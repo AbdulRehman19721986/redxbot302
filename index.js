@@ -186,16 +186,32 @@ async function startBot() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // -------- Robust Message Handler with Debug Logs --------
+    // -------- Message Handler with Full Debugging --------
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const m = messages[0];
-        if (!m.message) return;
+        if (!m.message) {
+            console.log('⚠️ Message has no .message field');
+            return;
+        }
 
         const from = m.key.remoteJid;
-        // Skip own messages and status broadcasts
-        if (m.key.fromMe || from === 'status@broadcast') return;
+        // Log EVERY message received
+        console.log('📥 New message from:', from);
+        console.log('📄 Message key:', JSON.stringify(m.key, null, 2));
+        console.log('📄 Message types:', Object.keys(m.message));
+        
+        // Skip own messages
+        if (m.key.fromMe) {
+            console.log('⏭️ Skipping own message.');
+            return;
+        }
+        // Skip status broadcasts
+        if (from === 'status@broadcast') {
+            console.log('⏭️ Skipping status broadcast.');
+            return;
+        }
 
-        // Extract message text from all possible fields
+        // Extract text from all possible fields
         let body = '';
         if (m.message.conversation) {
             body = m.message.conversation;
@@ -211,18 +227,27 @@ async function startBot() {
             body = m.message.buttonsResponseMessage.selectedButtonId;
         } else if (m.message.listResponseMessage?.singleSelectReply?.selectedRowId) {
             body = m.message.listResponseMessage.singleSelectReply.selectedRowId;
+        } else if (m.message.ephemeralMessage?.message?.conversation) {
+            body = m.message.ephemeralMessage.message.conversation;
+        } else if (m.message.ephemeralMessage?.message?.extendedTextMessage?.text) {
+            body = m.message.ephemeralMessage.message.extendedTextMessage.text;
         }
 
         if (!body) {
-            console.log('📭 No text body in message, type:', Object.keys(m.message)[0]);
+            console.log('📭 No extractable text in this message.');
             return;
         }
 
-        console.log(`📩 Received message from ${from}: "${body}"`);
+        console.log(`📩 Extracted body: "${body}"`);
 
         // Check if message starts with prefix
         if (!body.startsWith(config.PREFIX)) {
-            console.log(`⏭️ Message does not start with prefix "${config.PREFIX}"`);
+            console.log(`⏭️ Message does not start with prefix "${config.PREFIX}".`);
+            // For debugging, if message is "ping" without prefix, respond
+            if (body.toLowerCase() === 'ping') {
+                console.log('⚡ Responding to raw "ping" for testing.');
+                await sock.sendMessage(from, { text: 'Pong! (raw ping)' });
+            }
             return;
         }
 

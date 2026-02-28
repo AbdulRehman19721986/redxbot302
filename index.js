@@ -21,7 +21,6 @@ if (baileys.default) {
 
 // -------- Safely extract makeWASocket (with multiple fallbacks) --------
 let makeWASocket;
-// Try the most common patterns
 if (typeof baileys.default === 'function') {
     makeWASocket = baileys.default;
     console.log('✅ Using baileys.default as makeWASocket (function)');
@@ -38,27 +37,10 @@ if (typeof baileys.default === 'function') {
     makeWASocket = baileys.default.default.makeWASocket;
     console.log('✅ Using baileys.default.default.makeWASocket');
 } else {
-    // Last resort: try to get it from any nested object
-    const findMakeWASocket = (obj, depth = 0) => {
-        if (depth > 3) return null;
-        if (!obj || typeof obj !== 'object') return null;
-        if (typeof obj.makeWASocket === 'function') return obj.makeWASocket;
-        for (const key of Object.keys(obj)) {
-            const found = findMakeWASocket(obj[key], depth + 1);
-            if (found) return found;
-        }
-        return null;
-    };
-    makeWASocket = findMakeWASocket(baileys);
-    if (makeWASocket) {
-        console.log('✅ Found makeWASocket via deep search');
-    } else {
-        console.error('❌ Could not find makeWASocket function. Exiting.');
-        process.exit(1);
-    }
+    console.error('❌ Could not find makeWASocket function. Exiting.');
+    process.exit(1);
 }
 
-// -------- Extract other utilities from the same source --------
 const useMultiFileAuthState = baileys.useMultiFileAuthState || baileys.default?.useMultiFileAuthState;
 const DisconnectReason = baileys.DisconnectReason || baileys.default?.DisconnectReason;
 const fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion || baileys.default?.fetchLatestBaileysVersion;
@@ -188,7 +170,7 @@ async function startBot() {
 
         if (connection === 'open') {
             console.log('✅ Bot connected to WhatsApp!');
-            reconnectAttempts = 0; // reset on successful connection
+            reconnectAttempts = 0;
             
             try {
                 const ownerJid = config.OWNER_NUMBER + '@s.whatsapp.net';
@@ -225,15 +207,15 @@ async function startBot() {
             if (statusCode === DisconnectReason.loggedOut) {
                 console.log('❌ Logged out. Clearing session folder and restarting.');
                 await clearSessionFolder();
-                cachedCreds = null; // force re-download
-                process.exit(1); // Railway will restart
+                cachedCreds = null;
+                process.exit(1);
             } else {
                 reconnectAttempts++;
                 if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
                     console.log('❌ Max reconnection attempts reached. Exiting.');
                     process.exit(1);
                 }
-                const delay = Math.min(5000 * reconnectAttempts, 30000); // exponential backoff
+                const delay = Math.min(5000 * reconnectAttempts, 30000);
                 console.log(`🔁 Reconnecting in ${delay/1000} seconds... (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
                 reconnectTimeout = setTimeout(() => {
                     startBot().catch(err => console.error('Reconnect error:', err));
@@ -244,24 +226,62 @@ async function startBot() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // -------- Message handler --------
+    // -------- Universal message handler with deep debugging --------
     sock.ev.on('messages.upsert', async ({ messages }) => {
         for (const m of messages) {
-            if (!m.message) continue;
+            console.log('📥 Full message object:', JSON.stringify(m, (key, value) => 
+                typeof value === 'bigint' ? value.toString() : value, 2));
+
+            if (!m.message) {
+                console.log('⚠️ Message has no .message field');
+                continue;
+            }
+
             const from = m.key.remoteJid;
-            if (m.key.fromMe || from === 'status@broadcast') continue;
+            if (m.key.fromMe || from === 'status@broadcast') {
+                console.log('⏭️ Skipping own message or status broadcast');
+                continue;
+            }
 
+            // Extract text from all possible fields
             let body = '';
-            if (m.message.conversation) body = m.message.conversation;
-            else if (m.message.extendedTextMessage?.text) body = m.message.extendedTextMessage.text;
-            else if (m.message.imageMessage?.caption) body = m.message.imageMessage.caption;
-            else if (m.message.videoMessage?.caption) body = m.message.videoMessage.caption;
-            else continue;
+            if (m.message.conversation) {
+                body = m.message.conversation;
+            } else if (m.message.extendedTextMessage?.text) {
+                body = m.message.extendedTextMessage.text;
+            } else if (m.message.imageMessage?.caption) {
+                body = m.message.imageMessage.caption;
+            } else if (m.message.videoMessage?.caption) {
+                body = m.message.videoMessage.caption;
+            } else if (m.message.documentMessage?.caption) {
+                body = m.message.documentMessage.caption;
+            } else if (m.message.ephemeralMessage?.message?.conversation) {
+                body = m.message.ephemeralMessage.message.conversation;
+            } else if (m.message.ephemeralMessage?.message?.extendedTextMessage?.text) {
+                body = m.message.ephemeralMessage.message.extendedTextMessage.text;
+            } else if (m.message.viewOnceMessage?.message?.conversation) {
+                body = m.message.viewOnceMessage.message.conversation;
+            } else if (m.message.viewOnceMessage?.message?.imageMessage?.caption) {
+                body = m.message.viewOnceMessage.message.imageMessage.caption;
+            } else if (m.message.viewOnceMessage?.message?.videoMessage?.caption) {
+                body = m.message.viewOnceMessage.message.videoMessage.caption;
+            }
 
-            console.log(`📩 Received from ${from}: "${body}"`);
+            console.log(`📩 Extracted body: "${body}"`);
+
+            if (!body) {
+                console.log('📭 No extractable text in this message.');
+                continue;
+            }
+
+            // Debug: respond to any message containing "ping" (case-insensitive)
+            if (body.toLowerCase().includes('ping')) {
+                console.log('⚡ Responding to ping (debug)');
+                await sock.sendMessage(from, { text: '🏓 Pong! (debug)' });
+            }
 
             if (!body.startsWith(config.PREFIX)) {
-                console.log(`⏭️ No prefix "${config.PREFIX}"`);
+                console.log(`⏭️ Message does not start with prefix "${config.PREFIX}"`);
                 continue;
             }
 
@@ -284,6 +304,7 @@ async function startBot() {
                 }
             } else {
                 console.log(`❓ Unknown command: ${cmdName}`);
+                await sock.sendMessage(from, { text: `❌ Unknown command "${cmdName}". Use ${config.PREFIX}menu to see available commands.` });
             }
         }
     });

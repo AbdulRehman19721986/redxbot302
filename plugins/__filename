@@ -1,13 +1,15 @@
 import { fileURLToPath } from 'url';
+import path from 'path';
 import { cmd } from '../command.js';
 import axios from 'axios';
 import ytSearch from 'yt-search';
 import { Sticker, StickerTypes } from 'wa-sticker-formatter';
 import fs from 'fs';
-import path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+console.log('📦 Example plugin loaded.');
 
 // -------------------------------------------------------------------
 // 100 TEST COMMANDS (ping0 to ping99)
@@ -28,7 +30,7 @@ for (let i = 0; i < 100; i++) {
 // MAIN COMMANDS
 // -------------------------------------------------------------------
 
-// .play – YouTube audio downloader
+// .play – YouTube audio downloader (sends info)
 cmd({
     pattern: 'play',
     desc: 'Download audio from YouTube',
@@ -50,7 +52,7 @@ async (conn, mek, from, args, config) => {
     }
 });
 
-// .video – YouTube video downloader (similar, can use same)
+// .video – YouTube video downloader (sends info)
 cmd({
     pattern: 'video',
     desc: 'Download video from YouTube',
@@ -83,7 +85,6 @@ async (conn, mek, from, args, config) => {
     if (!args[0]) return await conn.sendMessage(from, { text: '❌ Please provide a message.' });
     const prompt = args.join(' ');
     try {
-        // You can replace with your preferred API
         const { data } = await axios.get(`https://api.akuari.my.id/ai/gpt?text=${encodeURIComponent(prompt)}`);
         const reply = data.respon || data.message || 'No response';
         await conn.sendMessage(from, { text: reply });
@@ -103,7 +104,7 @@ cmd({
 },
 async (conn, mek, from, args, config) => {
     if (!mek.message.imageMessage && !mek.message.videoMessage) {
-        return await conn.sendMessage(from, { text: '❌ Reply to an image or video.' });
+        return await conn.sendMessage(from, { text: '❌ Reply to an image or video with caption .sticker' });
     }
     let mediaMessage = mek.message.imageMessage || mek.message.videoMessage;
     let stream = await conn.downloadMediaMessage(mek);
@@ -151,7 +152,6 @@ cmd({
     filename: __filename
 },
 async (conn, mek, from, args, config) => {
-    // Only allow owner
     const sender = mek.key.participant || mek.key.remoteJid;
     if (sender !== config.OWNER_NUMBER + '@s.whatsapp.net') {
         return await conn.sendMessage(from, { text: '❌ Only owner can use this command.' });

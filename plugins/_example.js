@@ -1,6 +1,7 @@
-const { cmd } = require('../command');
+import { cmd } from '../command.js';
+import { commands } from '../command.js';
 
-// Generate 100 simple commands (ping0 to ping99)
+// Generate 100 test commands (ping0 .. ping99)
 for (let i = 0; i < 100; i++) {
     cmd({
         pattern: `ping${i}`,
@@ -13,7 +14,7 @@ for (let i = 0; i < 100; i++) {
     });
 }
 
-// Add some useful commands
+// Menu command
 cmd({
     pattern: 'menu',
     desc: 'Show bot menu',
@@ -31,6 +32,7 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: menuText });
 });
 
+// Owner contact command
 cmd({
     pattern: 'owner',
     desc: 'Show owner contact',
@@ -47,6 +49,7 @@ async (conn, mek, from, args, config) => {
     });
 });
 
+// Alive check
 cmd({
     pattern: 'alive',
     desc: 'Check bot status',

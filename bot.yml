@@ -1,8 +1,0 @@
-bot:
-  name: "REDXBOT"
-  online: true
-  prefix: "!"
-  history: false
-logging:
-  level: info
-  logToFile: true

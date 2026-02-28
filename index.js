@@ -1,4 +1,4 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } from '@whiskeysockets/baileys';
+import * as baileys from '@whiskeysockets/baileys';
 import pino from 'pino';
 import { Boom } from '@hapi/boom';
 import fs from 'fs';
@@ -8,6 +8,10 @@ import * as config from './config.js';
 import { commands } from './command.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Handle different export patterns of baileys
+const makeWASocket = baileys.default || baileys.makeWASocket;
+const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = baileys;
 
 // Load all plugins
 const pluginsDir = path.join(__dirname, 'plugins');

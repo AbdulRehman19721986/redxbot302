@@ -1,7 +1,15 @@
 /**
- * REDXBOT – WhatsApp Bot (Phone Pairing)
+ * REDXBOT – WhatsApp Bot
  * Owner: Abdul Rehman Rajpoot
- * Version: 1.0.0
+ * Version: 2.0.0
+ * 
+ * Connects using a SESSION_ID from MEGA (downloaded automatically).
+ * Environment variables:
+ *   SESSION_ID – MEGA file ID (e.g., abc123#key) – required
+ *   BOT_NAME – bot display name (default: REDXBOT)
+ *   PREFIX – command prefix (default: !)
+ *   OWNER_NAME – your name (default: Abdul Rehman Rajpoot)
+ *   OWNER_NUMBER – your WhatsApp number (for welcome message)
  */
 
 import * as baileys from '@whiskeysockets/baileys';
@@ -10,16 +18,22 @@ import { Boom } from '@hapi/boom';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { File } from 'megajs'; // for MEGA download
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ==================== CONFIGURATION (from environment) ====================
+const SESSION_ID = process.env.SESSION_ID || '';
 const BOT_NAME = process.env.BOT_NAME || 'REDXBOT';
 const PREFIX = process.env.PREFIX || '!';
 const OWNER_NAME = process.env.OWNER_NAME || 'Abdul Rehman Rajpoot';
-const OWNER_NUMBER = process.env.OWNER_NUMBER || ''; // optional, used for self‑DM
-const PHONE_NUMBER = process.env.PHONE_NUMBER || ''; // phone number for pairing (with country code, no +)
+const OWNER_NUMBER = process.env.OWNER_NUMBER || ''; // optional, for welcome DM
+
+if (!SESSION_ID) {
+  console.error('❌ SESSION_ID environment variable is required.');
+  process.exit(1);
+}
 
 // ==================== LOGGER (simple console) ====================
 const logger = {
@@ -28,88 +42,69 @@ const logger = {
   error: (...args) => console.error('[ERROR]', ...args),
 };
 
+// ==================== MEGA SESSION DOWNLOADER ====================
+async function loadSessionFromMega(sessionId) {
+  const sessionDir = path.join(__dirname, 'sessions');
+  const credsPath = path.join(sessionDir, 'creds.json');
+
+  if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
+
+  logger.info('[⏳] Downloading session from MEGA...');
+  const megaFileId = sessionId.startsWith('IK~') ? sessionId.slice(3) : sessionId;
+  const file = File.fromURL(`https://mega.nz/file/${megaFileId}`);
+
+  try {
+    const data = await new Promise((resolve, reject) => {
+      file.download((err, data) => {
+        if (err) reject(err);
+        else resolve(data);
+      });
+    });
+    fs.writeFileSync(credsPath, data);
+    logger.info('[✅] Session downloaded successfully!');
+    return JSON.parse(data.toString());
+  } catch (err) {
+    logger.error('[❌] Failed to download session:', err.message);
+    return null;
+  }
+}
+
 // ==================== COMMAND REGISTRY ====================
 const commands = new Map();
 
-// ----- hi command -----
-commands.set('hi', {
-  description: 'Say hello.',
-  execute: async (sock, from, args) => {
-    await sock.sendMessage(from, { text: `Hello! 👋 I am ${BOT_NAME}, your friendly bot.` });
-  }
+function registerCommand(name, description, execute) {
+  commands.set(name, { description, execute });
+}
+
+// ----- built‑in commands -----
+registerCommand('ping', 'Check bot response time.', async (sock, from, args) => {
+  const start = Date.now();
+  await sock.sendMessage(from, { text: 'Pong! 🏓' });
+  const latency = Date.now() - start;
+  await sock.sendMessage(from, { text: `Response time: ${latency}ms` });
 });
 
-// ----- help command -----
-commands.set('help', {
-  description: 'List available commands.',
-  execute: async (sock, from, args) => {
-    const helpText = `
+registerCommand('menu', 'Show all commands.', async (sock, from, args) => {
+  const cmdList = Array.from(commands.entries())
+    .map(([name, cmd]) => `${PREFIX}${name} – ${cmd.description}`)
+    .join('\n');
+  const menuText = `
 *${BOT_NAME} Commands*
 Prefix: ${PREFIX}
-${Array.from(commands.entries()).map(([name, cmd]) => `${PREFIX}${name} – ${cmd.description}`).join('\n')}
-    `;
-    await sock.sendMessage(from, { text: helpText });
-  }
+${cmdList}
+  `;
+  await sock.sendMessage(from, { text: menuText });
 });
 
-// ----- image command (placeholder) -----
-commands.set('image', {
-  description: 'Send an image.',
-  execute: async (sock, from, args) => {
-    await sock.sendMessage(from, {
-      image: { url: 'https://www.nexoscreator.tech/logo.png' }, // replace with your own image
-      caption: `Here is an image from ${BOT_NAME}!`
-    });
-  }
+registerCommand('test', 'Test if bot is working.', async (sock, from, args) => {
+  await sock.sendMessage(from, { text: '✅ Bot is working!' });
 });
 
-// ----- ping command -----
-commands.set('ping', {
-  description: 'Check bot response time.',
-  execute: async (sock, from, args) => {
-    const start = Date.now();
-    await sock.sendMessage(from, { text: 'Pong! 🏓' });
-    const latency = Date.now() - start;
-    await sock.sendMessage(from, { text: `Response time: ${latency}ms` });
-  }
+registerCommand('hi', 'Say hello.', async (sock, from, args) => {
+  await sock.sendMessage(from, { text: `Hello! 👋 I am ${BOT_NAME}.` });
 });
 
-// ----- poll command -----
-commands.set('poll', {
-  description: 'Create a poll. Usage: !poll Question? Option1; Option2; Option3',
-  execute: async (sock, from, args) => {
-    if (!args.length) {
-      await sock.sendMessage(from, { text: "Usage: !poll Question? Option1; Option2; Option3" });
-      return;
-    }
-    const input = args.join(" ").split("?");
-    if (input.length < 2) {
-      await sock.sendMessage(from, { text: "Please provide a question and at least two options." });
-      return;
-    }
-    const question = input[0].trim() + "?";
-    const options = input[1].split(";").map(opt => opt.trim()).filter(Boolean);
-    if (options.length < 2) {
-      await sock.sendMessage(from, { text: "Please provide at least two options separated by ';'." });
-      return;
-    }
-    await sock.sendMessage(from, {
-      poll: {
-        name: question,
-        values: options
-      }
-    });
-  }
-});
-
-// ----- time command -----
-commands.set('time', {
-  description: 'Get the current server time.',
-  execute: async (sock, from, args) => {
-    const now = new Date().toLocaleString();
-    await sock.sendMessage(from, { text: `Current server time: ${now}` });
-  }
-});
+// Add more commands as needed...
 
 // ==================== EVENT HANDLERS ====================
 
@@ -132,56 +127,44 @@ async function handleMessagesUpsert(sock, { messages }) {
       await command.execute(sock, from, args);
       logger.info(`Command executed: ${cmdName}`);
     } catch (err) {
-      logger.error(`Command error (${cmdName}): ${err}`);
+      logger.error(`Command error (${cmdName}):`, err);
+      await sock.sendMessage(from, { text: '❌ An error occurred while executing the command.' });
     }
   }
 }
 
-// ----- connection.update (pairing, connect, disconnect) -----
-let pairingCodeRequested = false; // to avoid requesting code multiple times
-
+// ----- connection.update (connect, disconnect) -----
 async function handleConnectionUpdate(sock, update, startBot) {
   const { connection, lastDisconnect, qr } = update;
-  // If QR is printed, we ignore it – we use pairing instead.
-  if (qr) {
-    logger.info('QR code ignored – using phone number pairing.');
-    return;
-  }
+  // We ignore QR because we use session ID
+  if (qr) return;
 
   if (connection === "close") {
     const reasonCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
     const shouldReconnect = reasonCode !== baileys.DisconnectReason.loggedOut;
     logger.warn(`Connection closed. Code: ${reasonCode}. Reconnecting? ${shouldReconnect}`);
     if (shouldReconnect) {
-      await delay(3000);
+      await delay(5000);
       startBot();
     } else {
-      logger.error("Logged out. Please delete auth_info and re-authenticate.");
+      logger.error("Logged out. Delete sessions folder and restart.");
     }
   } else if (connection === "open") {
-    logger.info("Connected to WhatsApp");
-    pairingCodeRequested = false; // reset
-    // Send a welcome message to the bot's own chat (self-DM)
-    try {
-      const selfId = sock.user?.id || sock.user?.jid || sock.user;
-      if (selfId) {
-        await sock.sendMessage(selfId, {
+    logger.info("✅ Bot connected to WhatsApp!");
+    // Send welcome message to owner if number provided
+    if (OWNER_NUMBER) {
+      try {
+        const ownerJid = OWNER_NUMBER + '@s.whatsapp.net';
+        await sock.sendMessage(ownerJid, {
           text: `✅ *${BOT_NAME} is now online!*\n\nOwner: ${OWNER_NAME}\nPrefix: ${PREFIX}\n\nThank you for using ${BOT_NAME}!`
         });
-      } else {
-        logger.warn("Could not determine bot's own WhatsApp ID for self-DM.");
+        logger.info('📨 Welcome message sent to owner.');
+      } catch (err) {
+        logger.error('Failed to send welcome message:', err);
       }
-    } catch (err) {
-      logger.error("Failed to send self-DM:", err);
     }
   }
 }
-
-// ----- other events (placeholder) -----
-const eventHandlers = [
-  { name: 'messages.upsert', handler: handleMessagesUpsert },
-  // Add more events if needed
-];
 
 // ==================== BAILIES SETUP ====================
 let makeWASocket;
@@ -203,6 +186,7 @@ const DisconnectReason = baileys.DisconnectReason || baileys.default?.Disconnect
 let currentSocket = null;
 let reconnectTimeout = null;
 let isConnecting = false;
+let cachedCreds = null; // store downloaded session
 
 async function startBot() {
   if (isConnecting) return;
@@ -215,11 +199,19 @@ async function startBot() {
   }
   if (reconnectTimeout) clearTimeout(reconnectTimeout);
 
-  const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
+  // Download session from MEGA only once
+  if (!cachedCreds) {
+    cachedCreds = await loadSessionFromMega(SESSION_ID);
+  }
+
+  const { state, saveCreds } = await useMultiFileAuthState('./sessions', {
+    creds: cachedCreds || undefined
+  });
+
   const { version } = await fetchLatestBaileysVersion();
 
   // Use pino for key store logger (minimal)
-  const keyStoreLogger = pino({ level: 'fatal' }); // only fatal errors
+  const keyStoreLogger = pino({ level: 'fatal' });
 
   const sock = makeWASocket({
     version,
@@ -227,8 +219,8 @@ async function startBot() {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, keyStoreLogger),
     },
-    printQRInTerminal: false, // we don't want QR
-    logger: pino({ level: 'silent' }), // silent for socket logs
+    printQRInTerminal: false, // no QR
+    logger: pino({ level: 'silent' }),
     browser: [BOT_NAME, 'Safari', '1.0.0'],
     markOnlineOnConnect: true,
     syncFullHistory: false,
@@ -239,29 +231,9 @@ async function startBot() {
   currentSocket = sock;
   isConnecting = false;
 
-  // If not registered yet and we have a phone number, request pairing code
-  if (!sock.authState.creds.registered && PHONE_NUMBER && !pairingCodeRequested) {
-    pairingCodeRequested = true;
-    try {
-      logger.info(`Requesting pairing code for number: ${PHONE_NUMBER}`);
-      let code = await sock.requestPairingCode(PHONE_NUMBER);
-      code = code?.match(/.{1,4}/g)?.join('-') || code; // format as XXXX-XXXX
-      logger.info(`🔑 Pairing code: ${code}`);
-      console.log('\n========================================');
-      console.log(`🔐 Enter this code in WhatsApp: ${code}`);
-      console.log('   (Linked Devices → Link with phone number)');
-      console.log('========================================\n');
-    } catch (err) {
-      logger.error('Failed to request pairing code:', err);
-    }
-  }
-
-  // Register event handlers
   sock.ev.on('creds.update', saveCreds);
   sock.ev.on('connection.update', (update) => handleConnectionUpdate(sock, update, startBot));
-  for (const { name, handler } of eventHandlers) {
-    sock.ev.on(name, (data) => handler(sock, data));
-  }
+  sock.ev.on('messages.upsert', (data) => handleMessagesUpsert(sock, data));
 }
 
 // Helper delay
@@ -270,6 +242,6 @@ function delay(ms) {
 }
 
 // Start the bot
-startBot().catch(err => console.error('Fatal error:', err));
+startBot().catch(err => logger.error('Fatal error:', err));
 
-process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
+process.on('uncaughtException', (err) => logger.error('Uncaught Exception:', err));

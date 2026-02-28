@@ -1,5 +1,5 @@
 {
-  "name": "REDXBOT",
+  "name": "redxbot302",
   "description": "WhatsApp bot made by Abdul Rehman Rajpoot",
   "logo": "https://image2url.com/r2/default/images/1772252008593-2690797c-4bd7-431e-b1f7-0f6ea21f7320.jpg",
   "keywords": ["redxbot"],
@@ -169,3 +169,4 @@
   ],
   "stack": "heroku-24"
 }
+

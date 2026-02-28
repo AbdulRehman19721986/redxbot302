@@ -5,8 +5,9 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import config from './config.js';
-// Import the CommonJS module and destructure the exports
-import commandModule from './command.js';
+
+// Import CommonJS module (now .cjs) and destructure
+import commandModule from './command.cjs';
 const { commands, cmd } = commandModule;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -97,7 +98,6 @@ async function connectToWA() {
                 await sock.sendMessage(sock.user.id, { text: upMessage });
             } catch (e) {}
 
-            // Load commands from command.js (already imported)
             console.log(`[✅] Loaded ${commands.length} commands`);
         }
     });

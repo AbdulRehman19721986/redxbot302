@@ -1,26 +1,27 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
-const pino = require('pino');
-const { Boom } = require('@hapi/boom');
-const fs = require('fs');
-const path = require('path');
-const config = require('./config');
-const { commands } = require('./command');
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } from '@whiskeysockets/baileys';
+import pino from 'pino';
+import { Boom } from '@hapi/boom';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import * as config from './config.js';
+import { commands } from './command.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load all plugins
 const pluginsDir = path.join(__dirname, 'plugins');
 if (fs.existsSync(pluginsDir)) {
-    fs.readdirSync(pluginsDir).forEach(file => {
-        if (file.endsWith('.js')) {
-            require(path.join(pluginsDir, file));
-        }
-    });
+    const pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
+    for (const file of pluginFiles) {
+        await import(path.join(pluginsDir, file));
+    }
     console.log(`✅ Loaded ${commands.length} commands.`);
 } else {
     console.warn('⚠️ Plugins folder not found. No commands loaded.');
 }
 
 async function startBot() {
-    // Attempt to download session from MEGA if SESSION_ID exists
     let creds = null;
     if (config.SESSION_ID) {
         creds = await config.loadSessionFromMega(config.SESSION_ID);
@@ -38,7 +39,7 @@ async function startBot() {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' })),
         },
-        printQRInTerminal: !creds, // only show QR if no session loaded
+        printQRInTerminal: !creds,
         logger: pino({ level: 'silent' }),
         browser: ['REDXBOT302', 'Safari', '1.0.0'],
         markOnlineOnConnect: false,
@@ -53,7 +54,6 @@ async function startBot() {
         }
         if (connection === 'open') {
             console.log('✅ Bot connected to WhatsApp!');
-            // Send startup message to owner
             const ownerJid = config.OWNER_NUMBER + '@s.whatsapp.net';
             await sock.sendMessage(ownerJid, { text: `*${config.BOT_NAME} is now online!*\n\nPrefix: ${config.PREFIX}\nMode: ${config.MODE}` });
         }
@@ -71,26 +71,26 @@ async function startBot() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Message handler
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const m = messages[0];
         if (!m.message) return;
-        const messageType = Object.keys(m.message)[0];
         const from = m.key.remoteJid;
-        const body = m.message.conversation || m.message.imageMessage?.caption || m.message.extendedTextMessage?.text || '';
+        let body = '';
+        if (m.message.conversation) body = m.message.conversation;
+        else if (m.message.imageMessage?.caption) body = m.message.imageMessage.caption;
+        else if (m.message.extendedTextMessage?.text) body = m.message.extendedTextMessage.text;
+        else return;
 
-        // Ignore own messages and status broadcasts
         if (m.key.fromMe || from === 'status@broadcast') return;
 
-        // Check prefix
         if (!body.startsWith(config.PREFIX)) return;
         const args = body.slice(config.PREFIX.length).trim().split(/ +/);
         const cmdName = args.shift().toLowerCase();
 
-        const cmd = commands.find(c => c.pattern === cmdName || (c.alias && c.alias.includes(cmdName)));
-        if (cmd) {
+        const command = commands.find(c => c.pattern === cmdName || (c.alias && c.alias.includes(cmdName)));
+        if (command) {
             try {
-                await cmd.function(sock, m, from, args, config);
+                await command.function(sock, m, from, args, config);
             } catch (err) {
                 console.error('Command error:', err);
                 await sock.sendMessage(from, { text: '❌ An error occurred while executing the command.' });

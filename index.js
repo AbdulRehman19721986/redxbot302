@@ -7,48 +7,24 @@
 import * as baileys from '@whiskeysockets/baileys';
 import pino from 'pino';
 import { Boom } from '@hapi/boom';
-import QRCode from 'qrcode';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import yaml from 'js-yaml';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ==================== CONFIGURATION ====================
-let config = {
-  bot: {
-    name: "REDXBOT",
-    online: true,
-    prefix: "!",
-    history: false
-  },
-  logging: {
-    level: "info",
-    logToFile: true
-  }
-};
-
-try {
-  const file = fs.readFileSync("./bot.yml", "utf8");
-  config = yaml.load(file);
-} catch (e) {
-  console.warn("⚠️ Failed to load bot.yml, using defaults.");
-}
-
-// Override with environment if needed
-const BOT_NAME = process.env.BOT_NAME || config.bot?.name || "REDXBOT";
-const PREFIX = process.env.PREFIX || config.bot?.prefix || "!";
-const OWNER_NAME = process.env.OWNER_NAME || "Abdul Rehman Rajpoot";
-const OWNER_NUMBER = process.env.OWNER_NUMBER || "";
+// ==================== CONFIGURATION (from environment) ====================
+const BOT_NAME = process.env.BOT_NAME || 'REDXBOT';
+const PREFIX = process.env.PREFIX || '!';
+const OWNER_NAME = process.env.OWNER_NAME || 'Abdul Rehman Rajpoot';
+const OWNER_NUMBER = process.env.OWNER_NUMBER || ''; // optional, used for self‑DM
+const SESSION_ID = process.env.SESSION_ID || ''; // optional, for MEGA session download (not used here)
 
 // ==================== LOGGER ====================
 const logger = pino({
-  level: config.logging?.level || "info",
-  transport: config.logging?.logToFile
-    ? { target: 'pino-pretty', options: { colorize: true } }
-    : undefined
+  level: process.env.LOG_LEVEL || 'info',
+  transport: { target: 'pino-pretty', options: { colorize: true } }
 });
 
 // ==================== COMMAND REGISTRY ====================
@@ -75,12 +51,12 @@ ${Array.from(commands.entries()).map(([name, cmd]) => `${PREFIX}${name} – ${cm
   }
 });
 
-// ----- image command -----
+// ----- image command (placeholder) -----
 commands.set('image', {
   description: 'Send an image.',
   execute: async (sock, from, args) => {
     await sock.sendMessage(from, {
-      image: { url: "https://www.nexoscreator.tech/logo.png" }, // replace with your own image
+      image: { url: 'https://www.nexoscreator.tech/logo.png' }, // replace with your own image
       caption: `Here is an image from ${BOT_NAME}!`
     });
   }
@@ -91,7 +67,7 @@ commands.set('ping', {
   description: 'Check bot response time.',
   execute: async (sock, from, args) => {
     const start = Date.now();
-    const sent = await sock.sendMessage(from, { text: 'Pong! 🏓' });
+    await sock.sendMessage(from, { text: 'Pong! 🏓' });
     const latency = Date.now() - start;
     await sock.sendMessage(from, { text: `Response time: ${latency}ms` });
   }
@@ -164,8 +140,8 @@ async function handleMessagesUpsert(sock, { messages }) {
 async function handleConnectionUpdate(sock, update, startBot) {
   const { connection, lastDisconnect, qr } = update;
   if (qr) {
-    logger.info("Scan the QR below to login:");
-    console.info(await QRCode.toString(qr, { type: "terminal", small: true }));
+    logger.info('QR code received – scan it with WhatsApp.');
+    // QR is already printed to terminal by Baileys because we set printQRInTerminal: true
   }
   if (connection === "close") {
     const reasonCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
@@ -195,10 +171,10 @@ async function handleConnectionUpdate(sock, update, startBot) {
   }
 }
 
-// Placeholder for other events – you can expand as needed
+// ----- other events (placeholder) -----
 const eventHandlers = [
   { name: 'messages.upsert', handler: handleMessagesUpsert },
-  // Add other events here if desired (e.g., group-participants.update, etc.)
+  // Add more events if needed
 ];
 
 // ==================== BAILIES SETUP ====================
@@ -218,11 +194,9 @@ const makeCacheableSignalKeyStore = baileys.makeCacheableSignalKeyStore || baile
 const DisconnectReason = baileys.DisconnectReason || baileys.default?.DisconnectReason;
 
 // ==================== BOT LAUNCHER ====================
-let cachedCreds = null;
 let currentSocket = null;
 let reconnectTimeout = null;
 let isConnecting = false;
-const MAX_RECONNECT_ATTEMPTS = 5;
 
 async function startBot() {
   if (isConnecting) return;
@@ -235,9 +209,6 @@ async function startBot() {
   }
   if (reconnectTimeout) clearTimeout(reconnectTimeout);
 
-  // (Optional) Load session from MEGA if you have a SESSION_ID variable.
-  // If not, we rely on local auth folder.
-
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
   const { version } = await fetchLatestBaileysVersion();
 
@@ -247,12 +218,12 @@ async function startBot() {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' })),
     },
-    printQRInTerminal: false, // we handle QR in connection.update
+    printQRInTerminal: true, // Baileys will print QR code directly
     logger: pino({ level: 'silent' }),
     browser: [BOT_NAME, 'Safari', '1.0.0'],
-    markOnlineOnConnect: config.bot?.online || true,
-    syncFullHistory: config.bot?.history || false,
-    shouldSyncHistoryMessage: config.bot?.history || false,
+    markOnlineOnConnect: true,
+    syncFullHistory: false,
+    shouldSyncHistoryMessage: false,
     getMessage: async () => undefined,
   });
 
@@ -261,9 +232,7 @@ async function startBot() {
 
   // Register event handlers
   sock.ev.on('creds.update', saveCreds);
-
   sock.ev.on('connection.update', (update) => handleConnectionUpdate(sock, update, startBot));
-
   for (const { name, handler } of eventHandlers) {
     sock.ev.on(name, (data) => handler(sock, data));
   }

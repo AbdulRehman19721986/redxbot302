@@ -18,25 +18,12 @@ import { getMute, setMute, getUnmute, setUnmute } from '../Utilis/groupmute.js';
 import { lydia, getLydia, setLydia } from '../Utilis/lydia.js';
 import { iplscore } from '../Utilis/Misc.js';
 import { getName } from '../Utilis/download.js';
-import { secondsToHms } from './afk.js'; // We'll define this inline
 import { memeMaker } from '../Utilis/meme.js';
 import { photoEditor } from '../Utilis/editors.js';
 import { installPlugin, getPlugin, deletePlugin } from '../Utilis/plugins.js';
 
 const __filename = fileURLToPath(import.meta.url);
 console.log('🔥 REDXBOT302 – All commands loaded.');
-
-// ==================== UTILITY FUNCTIONS (ported from Asena) ====================
-function secondsToHms(d) {
-    d = Number(d);
-    var h = Math.floor(d / 3600);
-    var m = Math.floor((d % 3600) / 60);
-    var s = Math.floor((d % 3600) % 60);
-    var hDisplay = h > 0 ? h + (h == 1 ? " hour, " : " hours, ") : "";
-    var mDisplay = m > 0 ? m + (m == 1 ? " minute, " : " minutes, ") : "";
-    var sDisplay = s > 0 ? s + (s == 1 ? " second" : " seconds") : "";
-    return hDisplay + mDisplay + sDisplay;
-}
 
 // ==================== BASIC COMMANDS ====================
 cmd({
@@ -457,20 +444,23 @@ async (conn, mek, from, args, config) => {
 });
 
 // ==================== IMAGE EDITING ====================
-cmd({
-    pattern: 'skull|sketch|pencil|color|kiss|bokeh|wanted|look|gandm|dark|makeup|cartoon',
-    desc: 'Apply photo filters',
-    category: 'editor',
-    filename: __filename
-},
-async (conn, mek, from, args, config) => {
-    if (!mek.message.imageMessage) return await conn.sendMessage(from, { text: '❌ Reply to an image.' });
-    const effect = args[0] || mek.message.imageMessage?.caption?.split(' ')[0]?.substring(1) || 'skull';
-    const location = await conn.downloadMediaMessage(mek);
-    const { status, result } = await photoEditor(location, effect);
-    if (!status) return await conn.sendMessage(from, { text: `❌ Failed: ${result}` });
-    const { buffer } = await getBuffer(result);
-    await conn.sendMessage(from, { image: buffer });
+// Separate commands for each effect
+const effects = ['skull', 'sketch', 'pencil', 'color', 'kiss', 'bokeh', 'wanted', 'look', 'gandm', 'dark', 'makeup', 'cartoon'];
+effects.forEach(effect => {
+    cmd({
+        pattern: effect,
+        desc: `Apply ${effect} filter to image`,
+        category: 'editor',
+        filename: __filename
+    },
+    async (conn, mek, from, args, config) => {
+        if (!mek.message.imageMessage) return await conn.sendMessage(from, { text: '❌ Reply to an image.' });
+        const location = await conn.downloadMediaMessage(mek);
+        const { status, result } = await photoEditor(location, effect);
+        if (!status) return await conn.sendMessage(from, { text: `❌ Failed: ${result}` });
+        const { buffer } = await getBuffer(result);
+        await conn.sendMessage(from, { image: buffer });
+    });
 });
 
 // ==================== MEME ====================
@@ -703,9 +693,6 @@ async (conn, mek, from, args, config) => {
     afkState.time = Date.now();
     await conn.sendMessage(from, { text: `✅ AFK set. Reason: ${afkState.reason}` });
 });
-
-// Message handler for AFK (will be triggered in main index, but we can add a listener later)
-// For simplicity, we rely on the main index to call commands only, not AFK.
 
 // ==================== WARN ====================
 cmd({
@@ -1019,12 +1006,6 @@ async (conn, mek, from, args, config) => {
     msg += `🔗 ${a.url}`;
     await conn.sendMessage(from, { text: msg });
 });
-
-// ==================== HENTAI (optional) ====================
-// Skipped for appropriateness.
-
-// ==================== NUDE / 18+ ====================
-// Skipped.
 
 // ==================== PLUGIN MANAGEMENT ====================
 cmd({

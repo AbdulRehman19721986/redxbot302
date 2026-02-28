@@ -1,9 +1,0 @@
-{
-  "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "npm install --omit=dev"
-  },
-  "deploy": {
-    "startCommand": "node index.js"
-  }
-}

@@ -29,19 +29,41 @@ const DisconnectReason = baileys.DisconnectReason || baileys.default?.Disconnect
 const fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion || baileys.default?.fetchLatestBaileysVersion;
 const makeCacheableSignalKeyStore = baileys.makeCacheableSignalKeyStore || baileys.default?.makeCacheableSignalKeyStore;
 
-// -------- Load all plugins --------
+// -------- Ensure plugins folder exists and has at least one plugin --------
 const pluginsDir = path.join(__dirname, 'plugins');
-if (fs.existsSync(pluginsDir)) {
-    const pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
-    console.log(`📁 Found ${pluginFiles.length} plugin files.`);
-    for (const file of pluginFiles) {
-        console.log(`📦 Loading plugin: ${file}`);
-        await import(path.join(pluginsDir, file));
-    }
-    console.log(`✅ Loaded ${commands.length} commands.`);
-} else {
-    console.warn('⚠️ Plugins folder not found. No commands loaded.');
+if (!fs.existsSync(pluginsDir)) {
+    fs.mkdirSync(pluginsDir, { recursive: true });
+    console.log('📁 Created plugins folder.');
 }
+
+// Write default plugin file if plugins folder is empty
+const pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
+if (pluginFiles.length === 0) {
+    const defaultPlugin = `import { fileURLToPath } from 'url';
+import { cmd } from '../command.js';
+const __filename = fileURLToPath(import.meta.url);
+
+cmd({
+    pattern: 'ping',
+    desc: 'Ping command',
+    category: 'utility',
+    filename: __filename
+},
+async (conn, mek, from, args, config) => {
+    await conn.sendMessage(from, { text: 'Pong!' });
+});
+`;
+    fs.writeFileSync(path.join(pluginsDir, 'example.js'), defaultPlugin);
+    console.log('📝 Created default plugin example.js');
+}
+
+// -------- Load all plugins --------
+console.log(`📁 Found ${pluginFiles.length} plugin files.`);
+for (const file of pluginFiles) {
+    console.log(`📦 Loading plugin: ${file}`);
+    await import(path.join(pluginsDir, file));
+}
+console.log(`✅ Loaded ${commands.length} commands.`);
 
 // -------- Add a built-in test command (always available) --------
 import { cmd } from './command.js';
@@ -56,11 +78,27 @@ async (conn, mek, from, args, config) => {
 });
 console.log('🔧 Built-in test command added.');
 
-// -------- Global variable to cache session after first download --------
+// -------- Global variables --------
 let cachedCreds = null;
+let currentSocket = null;
+let reconnectTimeout = null;
 
 async function startBot() {
-    // Download session only if not cached
+    // Clean up previous socket if exists
+    if (currentSocket) {
+        console.log('🧹 Closing previous socket...');
+        currentSocket.ev.removeAllListeners();
+        await currentSocket.end();
+        currentSocket = null;
+    }
+
+    // Clear any pending reconnect timeout
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+
+    // Download session only once
     if (!cachedCreds && config.SESSION_ID) {
         cachedCreds = await config.loadSessionFromMega(config.SESSION_ID);
     }
@@ -85,6 +123,8 @@ async function startBot() {
         defaultQueryTimeoutMs: 60000,
     });
 
+    currentSocket = sock;
+
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         
@@ -95,7 +135,6 @@ async function startBot() {
         if (connection === 'open') {
             console.log('✅ Bot connected to WhatsApp!');
             
-            // Send welcome message with error handling
             try {
                 const ownerJid = config.OWNER_NUMBER + '@s.whatsapp.net';
                 const welcomeMessage = `╔══════════════════════╗
@@ -133,8 +172,7 @@ async function startBot() {
                 process.exit(1);
             } else {
                 console.log('🔁 Reconnecting in 5 seconds...');
-                // Wait a bit before reconnecting to avoid rapid loops
-                setTimeout(() => startBot(), 5000);
+                reconnectTimeout = setTimeout(() => startBot(), 5000);
             }
         }
     });

@@ -6,7 +6,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import config from './config.js';
 
-// Import CommonJS module (now .cjs) and destructure
+// Import CommonJS command module
 import commandModule from './command.cjs';
 const { commands, cmd } = commandModule;
 

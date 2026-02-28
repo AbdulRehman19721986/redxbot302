@@ -1,7 +1,7 @@
 {
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "npm ci --omit=dev --no-cache"
+    "buildCommand": "npm install --omit=dev"
   },
   "deploy": {
     "startCommand": "node index.js"

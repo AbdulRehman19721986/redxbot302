@@ -5,7 +5,9 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import config from './config.js';
-import { commands, cmd } from './command.js';  // Your command loader
+// Import the CommonJS module and destructure the exports
+import commandModule from './command.js';
+const { commands, cmd } = commandModule;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

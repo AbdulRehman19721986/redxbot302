@@ -1,13 +1,7 @@
 /**
  * REDXBOT – WhatsApp Bot
  * Owner: Abdul Rehman Rajpoot
- * Version: 3.0.1
- * 
- * Features:
- * - Downloads session from MEGA using SESSION_ID
- * - Sends a heavy, professional welcome message with owner info and links
- * - Responds to .ping and ping (with and without prefix)
- * - Includes .menu command to list all commands
+ * Version: 3.1.0
  */
 
 import * as baileys from '@whiskeysockets/baileys';
@@ -21,12 +15,12 @@ import { File } from 'megajs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ==================== CONFIGURATION (from environment) ====================
+// ==================== CONFIG ====================
 const SESSION_ID = process.env.SESSION_ID || '';
 const BOT_NAME = process.env.BOT_NAME || 'REDXBOT';
 const PREFIX = process.env.PREFIX || '.';
 const OWNER_NAME = process.env.OWNER_NAME || 'Abdul Rehman Rajpoot';
-const OWNER_NUMBER = process.env.OWNER_NUMBER || ''; // WhatsApp number of the owner (for welcome DM)
+const OWNER_NUMBER = process.env.OWNER_NUMBER || '';
 const GITHUB_URL = process.env.GITHUB_URL || 'https://github.com/AbdulRehman19721986/REDXBOT-MD';
 const WHATSAPP_GROUP = process.env.WHATSAPP_GROUP || 'https://chat.whatsapp.com/LhSmx2SeXX75r8I2bxsNDo';
 const WHATSAPP_CHANNEL = process.env.WHATSAPP_CHANNEL || 'https://whatsapp.com/channel/0029VbCPnYf96H4SNehkev10';
@@ -39,7 +33,6 @@ if (!SESSION_ID) {
   process.exit(1);
 }
 
-// ==================== LOGGER ====================
 const logger = {
   info: (...args) => console.log('[INFO]', ...args),
   warn: (...args) => console.warn('[WARN]', ...args),
@@ -73,15 +66,13 @@ async function loadSessionFromMega(sessionId) {
   }
 }
 
-// ==================== COMMAND HANDLING ====================
+// ==================== COMMANDS ====================
 const commands = new Map();
 
-// Helper to register commands
 function registerCommand(name, description, execute) {
   commands.set(name, { description, execute });
 }
 
-// ----- ping command (works with and without prefix) -----
 registerCommand('ping', 'Check bot response time.', async (sock, from, args, msg) => {
   const start = Date.now();
   await sock.sendMessage(from, { text: 'Pong! 🏓' });
@@ -89,12 +80,10 @@ registerCommand('ping', 'Check bot response time.', async (sock, from, args, msg
   await sock.sendMessage(from, { text: `Response time: ${latency}ms` });
 });
 
-// ----- test command -----
 registerCommand('test', 'Test if bot is working.', async (sock, from, args, msg) => {
   await sock.sendMessage(from, { text: '✅ Bot is working properly!' });
 });
 
-// ----- menu command -----
 registerCommand('menu', 'Show all commands.', async (sock, from, args, msg) => {
   const cmdList = Array.from(commands.entries())
     .map(([name, cmd]) => `${PREFIX}${name} – ${cmd.description}`)
@@ -121,7 +110,7 @@ ${cmdList}
   await sock.sendMessage(from, { text: menuText });
 });
 
-// ==================== WELCOME MESSAGE (heavy, with image) ====================
+// ==================== WELCOME MESSAGE ====================
 async function sendWelcomeMessage(sock) {
   if (!OWNER_NUMBER) {
     logger.warn('OWNER_NUMBER not set – skipping welcome message.');
@@ -129,7 +118,6 @@ async function sendWelcomeMessage(sock) {
   }
   const ownerJid = OWNER_NUMBER + '@s.whatsapp.net';
   try {
-    // Fetch the image
     const response = await fetch(BOT_PIC_URL);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const arrayBuffer = await response.arrayBuffer();
@@ -163,9 +151,9 @@ async function sendWelcomeMessage(sock) {
     logger.info('📨 Heavy welcome message sent to owner.');
   } catch (err) {
     logger.error('Failed to send welcome message with image:', err);
-    // Fallback: send text only
+    // Fallback text only
+    const plainText = welcomeText.replace(/[│╔╗╚╝]/g, '');
     try {
-      const plainText = welcomeText.replace(/[│╔╗╚╝]/g, ''); // remove box drawing characters
       await sock.sendMessage(ownerJid, { text: plainText });
       logger.info('📨 Text‑only welcome message sent as fallback.');
     } catch (fallbackErr) {
@@ -174,9 +162,7 @@ async function sendWelcomeMessage(sock) {
   }
 }
 
-// ==================== EVENT HANDLERS ====================
-
-// ----- messages.upsert (incoming messages) -----
+// ==================== MESSAGE HANDLER ====================
 async function handleMessagesUpsert(sock, { messages }) {
   const msg = messages[0];
   if (!msg.message || msg.key.fromMe) return;
@@ -186,10 +172,9 @@ async function handleMessagesUpsert(sock, { messages }) {
   else if (msg.message.extendedTextMessage?.text) text = msg.message.extendedTextMessage.text;
   else return;
 
-  // Trim and lowercase for matching
   const trimmedText = text.trim().toLowerCase();
 
-  // Handle direct "ping" without prefix
+  // Direct "ping" without prefix
   if (trimmedText === 'ping') {
     logger.info(`Direct ping from ${from}`);
     const start = Date.now();
@@ -199,7 +184,6 @@ async function handleMessagesUpsert(sock, { messages }) {
     return;
   }
 
-  // Handle prefixed commands
   if (!text.startsWith(PREFIX)) return;
   const args = text.slice(PREFIX.length).trim().split(' ');
   const cmdName = args.shift().toLowerCase();
@@ -219,19 +203,47 @@ async function handleMessagesUpsert(sock, { messages }) {
   }
 }
 
-// ----- connection.update (connect, disconnect) -----
+// ==================== CONNECTION HANDLER ====================
+async function clearSessionFolder() {
+  const sessionPath = path.join(__dirname, 'sessions');
+  if (fs.existsSync(sessionPath)) {
+    fs.rmSync(sessionPath, { recursive: true, force: true });
+    logger.info('🧹 Cleared session folder.');
+  }
+}
+
 async function handleConnectionUpdate(sock, update, startBot) {
-  const { connection, lastDisconnect } = update;
+  const { connection, lastDisconnect, qr } = update;
+
+  if (qr) return; // ignore QR, we use session ID
 
   if (connection === "close") {
-    const reasonCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
-    const shouldReconnect = reasonCode !== baileys.DisconnectReason.loggedOut;
-    logger.warn(`Connection closed. Code: ${reasonCode}. Reconnecting? ${shouldReconnect}`);
-    if (shouldReconnect) {
+    const error = lastDisconnect?.error;
+    const statusCode = error?.output?.statusCode;
+    const message = error?.message || 'Unknown error';
+    logger.warn(`Connection closed. Status code: ${statusCode}, Reason: ${message}`);
+
+    // Conflict (440) or logged out (401) – force clear and exit
+    if (statusCode === 440 || statusCode === 401) {
+      logger.error(`
+╔════════════════════════════════════════════════════════╗
+║                   ❗ CONFLICT DETECTED                   ║
+╠════════════════════════════════════════════════════════╣
+║ Another device is using this WhatsApp number.           ║
+║ The bot cannot stay connected.                          ║
+╟────────────────────────────────────────────────────────╢
+║ ✅ FIX:                                                  ║
+║ 1. Open WhatsApp on your phone.                         ║
+║ 2. Go to Settings → Linked Devices.                     ║
+║ 3. Log out from ALL devices.                            ║
+║ 4. Restart this bot.                                    ║
+╚════════════════════════════════════════════════════════╝`);
+      await clearSessionFolder();
+      process.exit(1); // Railway will restart
+    } else {
+      // Other disconnections – attempt reconnect
       await delay(5000);
       startBot();
-    } else {
-      logger.error("Logged out. Delete sessions folder and restart.");
     }
   } else if (connection === "open") {
     logger.info("✅ Bot connected to WhatsApp!");
@@ -272,7 +284,6 @@ async function startBot() {
   }
   if (reconnectTimeout) clearTimeout(reconnectTimeout);
 
-  // Download session from MEGA (only once)
   if (!cachedCreds) {
     cachedCreds = await loadSessionFromMega(SESSION_ID);
   }
@@ -283,7 +294,6 @@ async function startBot() {
 
   const { version } = await fetchLatestBaileysVersion();
 
-  // Minimal pino logger for internal use
   const keyStoreLogger = pino({ level: 'fatal' });
 
   const sock = makeWASocket({
@@ -292,7 +302,7 @@ async function startBot() {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, keyStoreLogger),
     },
-    printQRInTerminal: false, // no QR
+    printQRInTerminal: false,
     logger: pino({ level: 'silent' }),
     browser: [BOT_NAME, 'Safari', '1.0.0'],
     markOnlineOnConnect: true,

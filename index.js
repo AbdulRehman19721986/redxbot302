@@ -1,13 +1,13 @@
 /**
  * REDXBOT – WhatsApp Bot
  * Owner: Abdul Rehman Rajpoot
- * Version: 3.0.0
+ * Version: 3.0.1
  * 
  * Features:
  * - Downloads session from MEGA using SESSION_ID
  * - Sends a heavy, professional welcome message with owner info and links
  * - Responds to .ping and ping (with and without prefix)
- * - Includes a test command
+ * - Includes .menu command to list all commands
  */
 
 import * as baileys from '@whiskeysockets/baileys';
@@ -82,7 +82,6 @@ function registerCommand(name, description, execute) {
 }
 
 // ----- ping command (works with and without prefix) -----
-// The message handler will check for prefix first; if not, it will still trigger on "ping"
 registerCommand('ping', 'Check bot response time.', async (sock, from, args, msg) => {
   const start = Date.now();
   await sock.sendMessage(from, { text: 'Pong! 🏓' });
@@ -95,15 +94,29 @@ registerCommand('test', 'Test if bot is working.', async (sock, from, args, msg)
   await sock.sendMessage(from, { text: '✅ Bot is working properly!' });
 });
 
-// ----- menu command (optional, but nice) -----
+// ----- menu command -----
 registerCommand('menu', 'Show all commands.', async (sock, from, args, msg) => {
   const cmdList = Array.from(commands.entries())
     .map(([name, cmd]) => `${PREFIX}${name} – ${cmd.description}`)
     .join('\n');
   const menuText = `
-*${BOT_NAME} Commands*
-Prefix: ${PREFIX}
+╔══════════════════════╗
+║   🔥 *${BOT_NAME} MENU* 🔥  ║
+╚══════════════════════╝
+
+*Prefix:* ${PREFIX}
+*Owner:* ${OWNER_NAME}
+
+*Available Commands:*
 ${cmdList}
+
+🔗 *Links:*
+• GitHub: ${GITHUB_URL}
+• WhatsApp Channel: ${WHATSAPP_CHANNEL}
+• Telegram: ${TELEGRAM_LINK}
+• YouTube: ${YOUTUBE_LINK}
+
+✨ *Thank you for using ${BOT_NAME}!* ✨
   `;
   await sock.sendMessage(from, { text: menuText });
 });
@@ -116,9 +129,11 @@ async function sendWelcomeMessage(sock) {
   }
   const ownerJid = OWNER_NUMBER + '@s.whatsapp.net';
   try {
-    // First, fetch the image buffer
+    // Fetch the image
     const response = await fetch(BOT_PIC_URL);
-    const buffer = await response.buffer();
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
     const welcomeText = `
 ╔══════════════════════╗
@@ -147,11 +162,15 @@ async function sendWelcomeMessage(sock) {
     });
     logger.info('📨 Heavy welcome message sent to owner.');
   } catch (err) {
-    logger.error('Failed to send welcome message:', err);
+    logger.error('Failed to send welcome message with image:', err);
     // Fallback: send text only
     try {
-      await sock.sendMessage(ownerJid, { text: welcomeText.replace(/[│╔╗╚╝]/g, '') });
-    } catch (e) {}
+      const plainText = welcomeText.replace(/[│╔╗╚╝]/g, ''); // remove box drawing characters
+      await sock.sendMessage(ownerJid, { text: plainText });
+      logger.info('📨 Text‑only welcome message sent as fallback.');
+    } catch (fallbackErr) {
+      logger.error('Fallback welcome message also failed:', fallbackErr);
+    }
   }
 }
 

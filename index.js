@@ -360,7 +360,7 @@ registerCommand('restart', 'Restart bot (owner only).', async (sock, from, args,
   process.exit(0);
 });
 
-// Group admin commands (simplified)
+// Group admin commands
 registerCommand('kick', 'Remove member from group.', async (sock, from, args, msg) => {
   if (!from.endsWith('@g.us')) return await sock.sendMessage(from, { text: '❌ Group only.' });
   const participants = await sock.groupMetadata(from);
@@ -458,7 +458,7 @@ registerCommand('tag', 'Tag all members.', async (sock, from, args, msg) => {
 });
 
 // ==================== FEATURE IMPLEMENTATIONS ====================
-const deletedMessages = new Map(); // store deleted messages for anti-delete
+const deletedMessages = new Map();
 const badWords = ['fuck', 'shit', 'bitch', 'asshole', 'dick', 'pussy', 'cunt', 'nigger', 'nigga'];
 
 // ==================== BAILIES SETUP ====================
@@ -532,7 +532,7 @@ async function startBot() {
   currentSocket = sock;
   isConnecting = false;
 
-  // ==================== EVENT HANDLERS (defined inside to access sock) ====================
+  // ==================== EVENT HANDLERS ====================
 
   // Store messages for anti-delete
   if (config.ANTI_DELETE) {
@@ -752,7 +752,6 @@ async function startBot() {
   // connection.update
   sock.ev.on('connection.update', (update) => handleConnectionUpdate(sock, update));
 
-  // Send welcome message after connection
   async function handleConnectionUpdate(sock, update) {
     const { connection, lastDisconnect, qr } = update;
     if (qr) return;
@@ -788,21 +787,20 @@ async function startBot() {
       await sendWelcomeMessage(sock);
     }
   }
-}
 
-async function sendWelcomeMessage(sock) {
-  if (!config.OWNER_NUMBER) {
-    logger.warn('OWNER_NUMBER not set – skipping welcome message.');
-    return;
-  }
-  const ownerJid = config.OWNER_NUMBER + '@s.whatsapp.net';
-  try {
-    const response = await fetch(config.BOT_PIC_URL);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+  async function sendWelcomeMessage(sock) {
+    if (!config.OWNER_NUMBER) {
+      logger.warn('OWNER_NUMBER not set – skipping welcome message.');
+      return;
+    }
+    const ownerJid = config.OWNER_NUMBER + '@s.whatsapp.net';
+    try {
+      const response = await fetch(config.BOT_PIC_URL);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
 
-    const welcomeText = `
+      const welcomeText = `
 ╔══════════════════════╗
 ║   🔥 *${config.BOT_NAME}* 🔥   ║
 ╚══════════════════════╝
@@ -823,19 +821,20 @@ async function sendWelcomeMessage(sock) {
 ✨ *Thank you for using ${config.BOT_NAME}!* ✨
     `;
 
-    await sock.sendMessage(ownerJid, {
-      image: buffer,
-      caption: welcomeText
-    });
-    logger.info('📨 Heavy welcome message sent to owner.');
-  } catch (err) {
-    logger.error('Failed to send welcome message with image:', err);
-    const plainText = welcomeText.replace(/[│╔╗╚╝]/g, '');
-    try {
-      await sock.sendMessage(ownerJid, { text: plainText });
-      logger.info('📨 Text‑only welcome message sent as fallback.');
-    } catch (fallbackErr) {
-      logger.error('Fallback welcome message also failed:', fallbackErr);
+      await sock.sendMessage(ownerJid, {
+        image: buffer,
+        caption: welcomeText
+      });
+      logger.info('📨 Heavy welcome message sent to owner.');
+    } catch (err) {
+      logger.error('Failed to send welcome message with image:', err);
+      const plainText = welcomeText.replace(/[│╔╗╚╝]/g, '');
+      try {
+        await sock.sendMessage(ownerJid, { text: plainText });
+        logger.info('📨 Text‑only welcome message sent as fallback.');
+      } catch (fallbackErr) {
+        logger.error('Fallback welcome message also failed:', fallbackErr);
+      }
     }
   }
 }

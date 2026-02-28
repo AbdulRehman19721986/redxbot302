@@ -1,5 +1,9 @@
+import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
 import { commands } from '../command.js';
+
+// Define __filename for ES module
+const __filename = fileURLToPath(import.meta.url);
 
 // Generate 100 test commands (ping0 .. ping99)
 for (let i = 0; i < 100; i++) {

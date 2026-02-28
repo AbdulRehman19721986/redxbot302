@@ -1,10 +1,7 @@
 /**
  * REDXBOT – WhatsApp Bot
  * Owner: Abdul Rehman Rajpoot
- * Version: 4.0.0
- * 
- * All features controlled by environment variables.
- * SESSION_ID required from MEGA.
+ * Version: 4.1.0
  */
 
 import * as baileys from '@whiskeysockets/baileys';
@@ -62,7 +59,6 @@ const config = {
   DESCRIPTION: env.DESCRIPTION || '*© CREATER abdul rehman rajpoot *',
   MENU_IMAGE_URL: env.MENU_IMAGE_URL || 'https://i.postimg.cc/LXCqjXmt/1765653734695.jpg',
   DEV: env.DEV || '923306137477',
-  // Links
   GITHUB_URL: env.GITHUB_URL || 'https://github.com/AbdulRehman19721986/REDXBOT-MD',
   WHATSAPP_GROUP: env.WHATSAPP_GROUP || 'https://chat.whatsapp.com/LhSmx2SeXX75r8I2bxsNDo',
   WHATSAPP_CHANNEL: env.WHATSAPP_CHANNEL || 'https://whatsapp.com/channel/0029VbCPnYf96H4SNehkev10',
@@ -117,7 +113,7 @@ function registerCommand(name, description, execute) {
   commands.set(name, { description, execute });
 }
 
-// ----- Generate 200+ commands (loop for ping0..ping99) -----
+// Generate 100 test commands
 for (let i = 0; i < 100; i++) {
   registerCommand(`ping${i}`, `Test command ${i}`, async (sock, from, args, msg) => {
     await sock.sendMessage(from, { text: `Pong ${i}!` });
@@ -162,13 +158,17 @@ ${cmdList}
 });
 
 registerCommand('alive', 'Check if bot is alive.', async (sock, from, args, msg) => {
-  const response = await fetch(config.ALIVE_IMG);
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  await sock.sendMessage(from, {
-    image: buffer,
-    caption: config.LIVE_MSG
-  });
+  try {
+    const response = await fetch(config.ALIVE_IMG);
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    await sock.sendMessage(from, {
+      image: buffer,
+      caption: config.LIVE_MSG
+    });
+  } catch {
+    await sock.sendMessage(from, { text: config.LIVE_MSG });
+  }
 });
 
 registerCommand('owner', 'Show owner contact.', async (sock, from, args, msg) => {
@@ -206,7 +206,6 @@ registerCommand('features', 'Show bot features.', async (sock, from, args, msg) 
 });
 
 registerCommand('mode', 'Change bot mode (public/private).', async (sock, from, args, msg) => {
-  // Only owner can change mode
   const sender = msg.key.participant || msg.key.remoteJid;
   if (sender !== config.OWNER_NUMBER + '@s.whatsapp.net') {
     return await sock.sendMessage(from, { text: '❌ Owner only.' });
@@ -218,7 +217,7 @@ registerCommand('mode', 'Change bot mode (public/private).', async (sock, from, 
   await sock.sendMessage(from, { text: `✅ Mode set to ${args[0]}.` });
 });
 
-// ----- Downloader commands -----
+// Downloader commands
 registerCommand('play', 'Download audio from YouTube.', async (sock, from, args, msg) => {
   if (!args[0]) return await sock.sendMessage(from, { text: '❌ Provide song name.' });
   const query = args.join(' ');
@@ -307,8 +306,8 @@ registerCommand('weather', 'Get weather info.', async (sock, from, args, msg) =>
   const city = args.join(' ');
   try {
     const { data } = await axios.get(`http://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=060a6bcfa19809c2cd4d97a212b19273`);
-    const msg = `*Weather in ${data.name}, ${data.sys.country}*\n🌡️ Temp: ${data.main.temp}°C\n☁️ ${data.weather[0].description}\n💧 Humidity: ${data.main.humidity}%\n💨 Wind: ${data.wind.speed} m/s`;
-    await sock.sendMessage(from, { text: msg });
+    const weatherMsg = `*Weather in ${data.name}, ${data.sys.country}*\n🌡️ Temp: ${data.main.temp}°C\n☁️ ${data.weather[0].description}\n💧 Humidity: ${data.main.humidity}%\n💨 Wind: ${data.wind.speed} m/s`;
+    await sock.sendMessage(from, { text: weatherMsg });
   } catch (e) {
     await sock.sendMessage(from, { text: '❌ City not found.' });
   }
@@ -361,7 +360,7 @@ registerCommand('restart', 'Restart bot (owner only).', async (sock, from, args,
   process.exit(0);
 });
 
-// ----- Group admin commands (simplified) -----
+// Group admin commands (simplified)
 registerCommand('kick', 'Remove member from group.', async (sock, from, args, msg) => {
   if (!from.endsWith('@g.us')) return await sock.sendMessage(from, { text: '❌ Group only.' });
   const participants = await sock.groupMetadata(from);
@@ -459,235 +458,8 @@ registerCommand('tag', 'Tag all members.', async (sock, from, args, msg) => {
 });
 
 // ==================== FEATURE IMPLEMENTATIONS ====================
-
-// Store deleted messages for anti-delete
-const deletedMessages = new Map();
-
-// Bad words list (simplified)
+const deletedMessages = new Map(); // store deleted messages for anti-delete
 const badWords = ['fuck', 'shit', 'bitch', 'asshole', 'dick', 'pussy', 'cunt', 'nigger', 'nigga'];
-
-// ==================== EVENT HANDLERS ====================
-
-// ----- messages.upsert (incoming messages) -----
-async function handleMessagesUpsert(sock, { messages }) {
-  const msg = messages[0];
-  if (!msg.message) return;
-  const from = msg.key.remoteJid;
-  const isGroup = from.endsWith('@g.us');
-  const sender = msg.key.participant || from;
-  const isOwner = sender === config.OWNER_NUMBER + '@s.whatsapp.net';
-  const isBot = sender === sock.user.id;
-
-  // Auto-typing / recording simulation
-  if (config.AUTO_TYPING && !isBot && from !== 'status@broadcast') {
-    await sock.sendPresenceUpdate('composing', from);
-  }
-  if (config.AUTO_RECORDING && !isBot && from !== 'status@broadcast') {
-    await sock.sendPresenceUpdate('recording', from);
-  }
-
-  // Auto-react if enabled
-  if (config.AUTO_REACT && !isBot && from !== 'status@broadcast') {
-    const emojis = config.CUSTOM_REACT_EMOJIS.split(',').map(e => e.trim());
-    const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-    await sock.sendMessage(from, { react: { text: randomEmoji, key: msg.key } });
-  }
-
-  // Mark message as read if enabled
-  if (config.READ_MESSAGE && from !== 'status@broadcast') {
-    await sock.readMessages([msg.key]);
-  }
-
-  // Anti-link in groups
-  if (isGroup && config.ANTI_LINK && !isOwner && !isBot) {
-    let text = '';
-    if (msg.message.conversation) text = msg.message.conversation;
-    else if (msg.message.extendedTextMessage?.text) text = msg.message.extendedTextMessage.text;
-    if (text && /(https?:\/\/[^\s]+)|(www\.[^\s]+)/.test(text)) {
-      const participants = await sock.groupMetadata(from);
-      const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-      const isBotAdmin = participants.participants.some(p => p.id === botJid && p.admin);
-      if (isBotAdmin) {
-        if (config.ANTI_LINK_KICK) {
-          await sock.groupParticipantsUpdate(from, [sender], 'remove');
-          await sock.sendMessage(from, { text: `❌ Link posted. User removed.` });
-        } else {
-          await sock.sendMessage(from, { text: `❌ Links are not allowed.`, delete: msg.key });
-        }
-        return;
-      }
-    }
-  }
-
-  // Anti-bad words in groups
-  if (isGroup && config.ANTI_BAD && !isOwner && !isBot) {
-    let text = '';
-    if (msg.message.conversation) text = msg.message.conversation;
-    else if (msg.message.extendedTextMessage?.text) text = msg.message.extendedTextMessage.text;
-    if (text) {
-      const lower = text.toLowerCase();
-      const found = badWords.some(word => lower.includes(word));
-      if (found) {
-        const participants = await sock.groupMetadata(from);
-        const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-        const isBotAdmin = participants.participants.some(p => p.id === botJid && p.admin);
-        if (isBotAdmin) {
-          await sock.sendMessage(from, { text: `❌ Bad words are not allowed.`, delete: msg.key });
-          return;
-        }
-      }
-    }
-  }
-
-  // Auto-sticker if enabled (convert image/video to sticker)
-  if (config.AUTO_STICKER && !isBot && (msg.message.imageMessage || msg.message.videoMessage)) {
-    try {
-      const stream = await sock.downloadMediaMessage(msg);
-      let buffer = Buffer.from([]);
-      for await (const chunk of stream) {
-        buffer = Buffer.concat([buffer, chunk]);
-      }
-      const sticker = new Sticker(buffer, {
-        pack: config.STICKER_NAME,
-        author: config.BOT_NAME,
-        type: StickerTypes.FULL,
-        quality: 80
-      });
-      await sock.sendMessage(from, { sticker: await sticker.toBuffer() });
-    } catch (e) {
-      logger.error('Auto-sticker failed:', e);
-    }
-  }
-
-  // Extract text for commands
-  let text = '';
-  if (msg.message.conversation) text = msg.message.conversation;
-  else if (msg.message.extendedTextMessage?.text) text = msg.message.extendedTextMessage.text;
-  else return;
-
-  const trimmedText = text.trim().toLowerCase();
-
-  // Direct "ping" without prefix
-  if (trimmedText === 'ping' && !isBot) {
-    const start = Date.now();
-    await sock.sendMessage(from, { text: 'Pong! 🏓 (direct)' });
-    const latency = Date.now() - start;
-    await sock.sendMessage(from, { text: `Response time: ${latency}ms` });
-    return;
-  }
-
-  // Command handling
-  if (!text.startsWith(config.PREFIX)) return;
-  const args = text.slice(config.PREFIX.length).trim().split(' ');
-  const cmdName = args.shift().toLowerCase();
-
-  // Check mode (public/private)
-  const shouldRespond = config.PUBLIC_MODE || isOwner || (isGroup && config.MODE === 'public');
-  if (!shouldRespond) return;
-
-  // Mark command as read if enabled
-  if (config.READ_CMD && from !== 'status@broadcast') {
-    await sock.readMessages([msg.key]);
-  }
-
-  const command = commands.get(cmdName);
-  if (command) {
-    try {
-      await command.execute(sock, from, args, msg);
-      logger.info(`✅ Command ${cmdName} executed.`);
-    } catch (err) {
-      logger.error(`❌ Command error (${cmdName}):`, err);
-      await sock.sendMessage(from, { text: '❌ An error occurred while executing the command.' });
-    }
-  } else {
-    await sock.sendMessage(from, { text: `❌ Unknown command. Use ${config.PREFIX}menu to see available commands.` });
-  }
-}
-
-// ----- messages.update (for anti-delete) -----
-async function handleMessagesUpdate(sock, updates) {
-  if (!config.ANTI_DELETE) return;
-  for (const update of updates) {
-    if (update.update.messageStubType === 5 || update.update.messageStubType === 6) {
-      // Message deleted
-      const key = update.key;
-      const msg = deletedMessages.get(key.id);
-      if (msg) {
-        const from = key.remoteJid;
-        const sender = key.participant || key.remoteJid;
-        const deletedContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '[Media]';
-        const target = config.ANTI_DEL_PATH === 'same' ? from : config.OWNER_NUMBER + '@s.whatsapp.net';
-        await sock.sendMessage(target, { text: `🚫 *Deleted Message*\nFrom: @${sender.split('@')[0]}\nContent: ${deletedContent}`, mentions: [sender] });
-      }
-    }
-  }
-}
-
-// ----- messages.upsert also store messages for anti-delete
-sock.ev.on('messages.upsert', ({ messages }) => {
-  if (config.ANTI_DELETE) {
-    for (const msg of messages) {
-      if (msg.message) {
-        deletedMessages.set(msg.key.id, msg);
-        // Keep only last 1000 messages to avoid memory leak
-        if (deletedMessages.size > 1000) {
-          const firstKey = deletedMessages.keys().next().value;
-          deletedMessages.delete(firstKey);
-        }
-      }
-    }
-  }
-});
-
-// ----- group-participants.update (welcome, goodbye, admin events) -----
-async function handleGroupParticipantsUpdate(sock, update) {
-  const { id, participants, action } = update;
-  if (!config.WELCOME && !config.ADMIN_EVENTS) return;
-  const groupMetadata = await sock.groupMetadata(id);
-  const groupName = groupMetadata.subject;
-
-  for (const jid of participants) {
-    const name = jid.split('@')[0];
-    if (action === 'add' && config.WELCOME) {
-      await sock.sendMessage(id, { text: `👋 Welcome @${name} to *${groupName}!*`, mentions: [jid] });
-    } else if (action === 'remove' && config.WELCOME) {
-      await sock.sendMessage(id, { text: `👋 Goodbye @${name} from *${groupName}.*`, mentions: [jid] });
-    } else if (action === 'promote' && config.ADMIN_EVENTS) {
-      await sock.sendMessage(id, { text: `👑 @${name} has been promoted to admin.`, mentions: [jid] });
-    } else if (action === 'demote' && config.ADMIN_EVENTS) {
-      await sock.sendMessage(id, { text: `⬇️ @${name} has been demoted from admin.`, mentions: [jid] });
-    }
-  }
-}
-
-// ----- messages.reaction (if needed) -----
-
-// ----- status updates (for auto-status) -----
-async function handleStatusUpdate(sock, { messages }) {
-  for (const msg of messages) {
-    if (msg.key.remoteJid !== 'status@broadcast') continue;
-    const from = msg.key.remoteJid;
-    const sender = msg.key.participant || from;
-    const text = msg.message?.conversation || msg.message?.imageMessage?.caption || msg.message?.videoMessage?.caption || '';
-
-    // Auto-seen
-    if (config.AUTO_STATUS_SEEN) {
-      await sock.readMessages([msg.key]);
-    }
-
-    // Auto-react
-    if (config.AUTO_STATUS_REACT) {
-      const emojis = config.CUSTOM_REACT_EMOJIS.split(',').map(e => e.trim());
-      const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-      await sock.sendMessage(sender, { react: { text: randomEmoji, key: msg.key } });
-    }
-
-    // Auto-reply
-    if (config.AUTO_STATUS_REPLY && config.AUTO_STATUS_MSG) {
-      await sock.sendMessage(sender, { text: config.AUTO_STATUS_MSG, quoted: msg });
-    }
-  }
-}
 
 // ==================== BAILIES SETUP ====================
 let makeWASocket;
@@ -760,12 +532,7 @@ async function startBot() {
   currentSocket = sock;
   isConnecting = false;
 
-  sock.ev.on('creds.update', saveCreds);
-  sock.ev.on('connection.update', handleConnectionUpdate);
-  sock.ev.on('messages.upsert', handleMessagesUpsert);
-  sock.ev.on('messages.update', handleMessagesUpdate);
-  sock.ev.on('group-participants.update', handleGroupParticipantsUpdate);
-  sock.ev.on('messages.upsert', handleStatusUpdate); // for status
+  // ==================== EVENT HANDLERS (defined inside to access sock) ====================
 
   // Store messages for anti-delete
   if (config.ANTI_DELETE) {
@@ -781,20 +548,223 @@ async function startBot() {
       }
     });
   }
-}
 
-async function handleConnectionUpdate(update) {
-  const { connection, lastDisconnect, qr } = update;
-  if (qr) return;
+  // Handle incoming messages
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message) return;
+    const from = msg.key.remoteJid;
+    const isGroup = from.endsWith('@g.us');
+    const sender = msg.key.participant || from;
+    const isOwner = sender === config.OWNER_NUMBER + '@s.whatsapp.net';
+    const isBot = sender === sock.user.id;
 
-  if (connection === "close") {
-    const error = lastDisconnect?.error;
-    const statusCode = error?.output?.statusCode;
-    const message = error?.message || 'Unknown error';
-    logger.warn(`Connection closed. Status code: ${statusCode}, Reason: ${message}`);
+    // Auto-typing / recording
+    if (config.AUTO_TYPING && !isBot && from !== 'status@broadcast') {
+      await sock.sendPresenceUpdate('composing', from);
+    }
+    if (config.AUTO_RECORDING && !isBot && from !== 'status@broadcast') {
+      await sock.sendPresenceUpdate('recording', from);
+    }
 
-    if (statusCode === 440 || statusCode === 401) {
-      logger.error(`
+    // Auto-react
+    if (config.AUTO_REACT && !isBot && from !== 'status@broadcast') {
+      const emojis = config.CUSTOM_REACT_EMOJIS.split(',').map(e => e.trim());
+      const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+      await sock.sendMessage(from, { react: { text: randomEmoji, key: msg.key } });
+    }
+
+    // Read message
+    if (config.READ_MESSAGE && from !== 'status@broadcast') {
+      await sock.readMessages([msg.key]);
+    }
+
+    // Anti-link in groups
+    if (isGroup && config.ANTI_LINK && !isOwner && !isBot) {
+      let text = '';
+      if (msg.message.conversation) text = msg.message.conversation;
+      else if (msg.message.extendedTextMessage?.text) text = msg.message.extendedTextMessage.text;
+      if (text && /(https?:\/\/[^\s]+)|(www\.[^\s]+)/.test(text)) {
+        const participants = await sock.groupMetadata(from);
+        const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+        const isBotAdmin = participants.participants.some(p => p.id === botJid && p.admin);
+        if (isBotAdmin) {
+          if (config.ANTI_LINK_KICK) {
+            await sock.groupParticipantsUpdate(from, [sender], 'remove');
+            await sock.sendMessage(from, { text: `❌ Link posted. User removed.` });
+          } else {
+            await sock.sendMessage(from, { text: `❌ Links are not allowed.`, delete: msg.key });
+          }
+          return;
+        }
+      }
+    }
+
+    // Anti-bad words
+    if (isGroup && config.ANTI_BAD && !isOwner && !isBot) {
+      let text = '';
+      if (msg.message.conversation) text = msg.message.conversation;
+      else if (msg.message.extendedTextMessage?.text) text = msg.message.extendedTextMessage.text;
+      if (text) {
+        const lower = text.toLowerCase();
+        const found = badWords.some(word => lower.includes(word));
+        if (found) {
+          const participants = await sock.groupMetadata(from);
+          const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+          const isBotAdmin = participants.participants.some(p => p.id === botJid && p.admin);
+          if (isBotAdmin) {
+            await sock.sendMessage(from, { text: `❌ Bad words are not allowed.`, delete: msg.key });
+            return;
+          }
+        }
+      }
+    }
+
+    // Auto-sticker
+    if (config.AUTO_STICKER && !isBot && (msg.message.imageMessage || msg.message.videoMessage)) {
+      try {
+        const stream = await sock.downloadMediaMessage(msg);
+        let buffer = Buffer.from([]);
+        for await (const chunk of stream) {
+          buffer = Buffer.concat([buffer, chunk]);
+        }
+        const sticker = new Sticker(buffer, {
+          pack: config.STICKER_NAME,
+          author: config.BOT_NAME,
+          type: StickerTypes.FULL,
+          quality: 80
+        });
+        await sock.sendMessage(from, { sticker: await sticker.toBuffer() });
+      } catch (e) {
+        logger.error('Auto-sticker failed:', e);
+      }
+    }
+
+    // Extract text for commands
+    let text = '';
+    if (msg.message.conversation) text = msg.message.conversation;
+    else if (msg.message.extendedTextMessage?.text) text = msg.message.extendedTextMessage.text;
+    else return;
+
+    const trimmedText = text.trim().toLowerCase();
+
+    // Direct "ping"
+    if (trimmedText === 'ping' && !isBot) {
+      const start = Date.now();
+      await sock.sendMessage(from, { text: 'Pong! 🏓 (direct)' });
+      const latency = Date.now() - start;
+      await sock.sendMessage(from, { text: `Response time: ${latency}ms` });
+      return;
+    }
+
+    // Prefixed commands
+    if (!text.startsWith(config.PREFIX)) return;
+    const args = text.slice(config.PREFIX.length).trim().split(' ');
+    const cmdName = args.shift().toLowerCase();
+
+    const shouldRespond = config.PUBLIC_MODE || isOwner || (isGroup && config.MODE === 'public');
+    if (!shouldRespond) return;
+
+    if (config.READ_CMD && from !== 'status@broadcast') {
+      await sock.readMessages([msg.key]);
+    }
+
+    const command = commands.get(cmdName);
+    if (command) {
+      try {
+        await command.execute(sock, from, args, msg);
+        logger.info(`✅ Command ${cmdName} executed.`);
+      } catch (err) {
+        logger.error(`❌ Command error (${cmdName}):`, err);
+        await sock.sendMessage(from, { text: '❌ An error occurred while executing the command.' });
+      }
+    } else {
+      await sock.sendMessage(from, { text: `❌ Unknown command. Use ${config.PREFIX}menu to see available commands.` });
+    }
+  });
+
+  // messages.update (anti-delete)
+  sock.ev.on('messages.update', async (updates) => {
+    if (!config.ANTI_DELETE) return;
+    for (const update of updates) {
+      if (update.update.messageStubType === 5 || update.update.messageStubType === 6) {
+        const key = update.key;
+        const msg = deletedMessages.get(key.id);
+        if (msg) {
+          const from = key.remoteJid;
+          const sender = key.participant || key.remoteJid;
+          const deletedContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '[Media]';
+          const target = config.ANTI_DEL_PATH === 'same' ? from : config.OWNER_NUMBER + '@s.whatsapp.net';
+          await sock.sendMessage(target, { text: `🚫 *Deleted Message*\nFrom: @${sender.split('@')[0]}\nContent: ${deletedContent}`, mentions: [sender] });
+        }
+      }
+    }
+  });
+
+  // group-participants.update (welcome, goodbye, admin events)
+  sock.ev.on('group-participants.update', async (update) => {
+    const { id, participants, action } = update;
+    if (!config.WELCOME && !config.ADMIN_EVENTS) return;
+    const groupMetadata = await sock.groupMetadata(id);
+    const groupName = groupMetadata.subject;
+
+    for (const jid of participants) {
+      const name = jid.split('@')[0];
+      if (action === 'add' && config.WELCOME) {
+        await sock.sendMessage(id, { text: `👋 Welcome @${name} to *${groupName}!*`, mentions: [jid] });
+      } else if (action === 'remove' && config.WELCOME) {
+        await sock.sendMessage(id, { text: `👋 Goodbye @${name} from *${groupName}.*`, mentions: [jid] });
+      } else if (action === 'promote' && config.ADMIN_EVENTS) {
+        await sock.sendMessage(id, { text: `👑 @${name} has been promoted to admin.`, mentions: [jid] });
+      } else if (action === 'demote' && config.ADMIN_EVENTS) {
+        await sock.sendMessage(id, { text: `⬇️ @${name} has been demoted from admin.`, mentions: [jid] });
+      }
+    }
+  });
+
+  // status updates
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    for (const msg of messages) {
+      if (msg.key.remoteJid !== 'status@broadcast') continue;
+      const from = msg.key.remoteJid;
+      const sender = msg.key.participant || from;
+      const text = msg.message?.conversation || msg.message?.imageMessage?.caption || msg.message?.videoMessage?.caption || '';
+
+      if (config.AUTO_STATUS_SEEN) {
+        await sock.readMessages([msg.key]);
+      }
+
+      if (config.AUTO_STATUS_REACT) {
+        const emojis = config.CUSTOM_REACT_EMOJIS.split(',').map(e => e.trim());
+        const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+        await sock.sendMessage(sender, { react: { text: randomEmoji, key: msg.key } });
+      }
+
+      if (config.AUTO_STATUS_REPLY && config.AUTO_STATUS_MSG) {
+        await sock.sendMessage(sender, { text: config.AUTO_STATUS_MSG, quoted: msg });
+      }
+    }
+  });
+
+  // creds.update
+  sock.ev.on('creds.update', saveCreds);
+
+  // connection.update
+  sock.ev.on('connection.update', (update) => handleConnectionUpdate(sock, update));
+
+  // Send welcome message after connection
+  async function handleConnectionUpdate(sock, update) {
+    const { connection, lastDisconnect, qr } = update;
+    if (qr) return;
+
+    if (connection === "close") {
+      const error = lastDisconnect?.error;
+      const statusCode = error?.output?.statusCode;
+      const message = error?.message || 'Unknown error';
+      logger.warn(`Connection closed. Status code: ${statusCode}, Reason: ${message}`);
+
+      if (statusCode === 440 || statusCode === 401) {
+        logger.error(`
 ╔════════════════════════════════════════════════════════╗
 ║                   ❗ CONFLICT DETECTED                   ║
 ╠════════════════════════════════════════════════════════╣
@@ -807,15 +777,16 @@ async function handleConnectionUpdate(update) {
 ║ 3. Log out from ALL devices.                            ║
 ║ 4. Restart this bot.                                    ║
 ╚════════════════════════════════════════════════════════╝`);
-      await clearSessionFolder();
-      process.exit(1);
-    } else {
-      await delay(5000);
-      startBot();
+        await clearSessionFolder();
+        process.exit(1);
+      } else {
+        await delay(5000);
+        startBot();
+      }
+    } else if (connection === "open") {
+      logger.info("✅ Bot connected to WhatsApp!");
+      await sendWelcomeMessage(sock);
     }
-  } else if (connection === "open") {
-    logger.info("✅ Bot connected to WhatsApp!");
-    await sendWelcomeMessage(currentSocket);
   }
 }
 

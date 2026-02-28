@@ -1,5 +1,5 @@
 /**
- * REDXBOT – WhatsApp Bot
+ * REDXBOT – WhatsApp Bot (Phone Pairing)
  * Owner: Abdul Rehman Rajpoot
  * Version: 1.0.0
  */
@@ -19,7 +19,7 @@ const BOT_NAME = process.env.BOT_NAME || 'REDXBOT';
 const PREFIX = process.env.PREFIX || '!';
 const OWNER_NAME = process.env.OWNER_NAME || 'Abdul Rehman Rajpoot';
 const OWNER_NUMBER = process.env.OWNER_NUMBER || ''; // optional, used for self‑DM
-const SESSION_ID = process.env.SESSION_ID || ''; // optional, for MEGA session download (not used here)
+const PHONE_NUMBER = process.env.PHONE_NUMBER || ''; // phone number for pairing (with country code, no +)
 
 // ==================== LOGGER (simple console) ====================
 const logger = {
@@ -137,13 +137,17 @@ async function handleMessagesUpsert(sock, { messages }) {
   }
 }
 
-// ----- connection.update (QR, connect, disconnect) -----
+// ----- connection.update (pairing, connect, disconnect) -----
+let pairingCodeRequested = false; // to avoid requesting code multiple times
+
 async function handleConnectionUpdate(sock, update, startBot) {
   const { connection, lastDisconnect, qr } = update;
+  // If QR is printed, we ignore it – we use pairing instead.
   if (qr) {
-    logger.info('QR code received – scan it with WhatsApp.');
-    // QR is already printed to terminal by Baileys because we set printQRInTerminal: true
+    logger.info('QR code ignored – using phone number pairing.');
+    return;
   }
+
   if (connection === "close") {
     const reasonCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
     const shouldReconnect = reasonCode !== baileys.DisconnectReason.loggedOut;
@@ -156,6 +160,7 @@ async function handleConnectionUpdate(sock, update, startBot) {
     }
   } else if (connection === "open") {
     logger.info("Connected to WhatsApp");
+    pairingCodeRequested = false; // reset
     // Send a welcome message to the bot's own chat (self-DM)
     try {
       const selfId = sock.user?.id || sock.user?.jid || sock.user;
@@ -222,7 +227,7 @@ async function startBot() {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, keyStoreLogger),
     },
-    printQRInTerminal: true,
+    printQRInTerminal: false, // we don't want QR
     logger: pino({ level: 'silent' }), // silent for socket logs
     browser: [BOT_NAME, 'Safari', '1.0.0'],
     markOnlineOnConnect: true,
@@ -233,6 +238,23 @@ async function startBot() {
 
   currentSocket = sock;
   isConnecting = false;
+
+  // If not registered yet and we have a phone number, request pairing code
+  if (!sock.authState.creds.registered && PHONE_NUMBER && !pairingCodeRequested) {
+    pairingCodeRequested = true;
+    try {
+      logger.info(`Requesting pairing code for number: ${PHONE_NUMBER}`);
+      let code = await sock.requestPairingCode(PHONE_NUMBER);
+      code = code?.match(/.{1,4}/g)?.join('-') || code; // format as XXXX-XXXX
+      logger.info(`🔑 Pairing code: ${code}`);
+      console.log('\n========================================');
+      console.log(`🔐 Enter this code in WhatsApp: ${code}`);
+      console.log('   (Linked Devices → Link with phone number)');
+      console.log('========================================\n');
+    } catch (err) {
+      logger.error('Failed to request pairing code:', err);
+    }
+  }
 
   // Register event handlers
   sock.ev.on('creds.update', saveCreds);

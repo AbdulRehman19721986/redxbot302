@@ -39,6 +39,7 @@ if (!fs.existsSync(pluginsDir)) {
 let pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
 
 if (pluginFiles.length === 0) {
+    console.log('⚠️ No plugin files found. A default plugin will be created.');
     const defaultPlugin = `import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
 const __filename = fileURLToPath(import.meta.url);
@@ -64,19 +65,6 @@ for (const file of pluginFiles) {
     await import(path.join(pluginsDir, file));
 }
 console.log(`✅ Loaded ${commands.length} commands.`);
-
-// -------- Add a built-in test command (always available) --------
-import { cmd } from './command.js';
-cmd({
-    pattern: 'test',
-    desc: 'Test if bot is working',
-    category: 'debug',
-    filename: 'builtin'
-},
-async (conn, mek, from, args, config) => {
-    await conn.sendMessage(from, { text: '✅ Bot is working! Commands are active.' });
-});
-console.log('🔧 Built-in test command added.');
 
 // -------- Global variables --------
 let cachedCreds = null;
@@ -125,20 +113,15 @@ async function startBot() {
         markOnlineOnConnect: false,
         generateHighQualityLinkPreview: false,
         defaultQueryTimeoutMs: 60000,
-        syncFullHistory: true,                // 👈 important: sync messages
-        getMessage: async () => undefined,    // 👈 required to avoid errors
+        syncFullHistory: true,                // 👈 critical: sync messages
+        getMessage: async () => undefined,    // 👈 dummy function required
+        patchMessageBeforeSending: (msg) => msg, // ensure compatibility
     });
 
     currentSocket = sock;
     isConnecting = false;
 
-    // -------- Log ALL events (debug) --------
-    sock.ev.on('*', (event, data) => {
-        if (event !== 'messages.upsert' && event !== 'connection.update' && event !== 'creds.update') {
-            console.log(`📡 Event: ${event}`);
-        }
-    });
-
+    // -------- Connection update handler --------
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         
@@ -195,31 +178,29 @@ async function startBot() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // -------- Message Handler with Full Debugging --------
+    // -------- Universal message handler (works with all Baileys versions) --------
     sock.ev.on('messages.upsert', async ({ messages }) => {
-        console.log('📥 messages.upsert event triggered!');
+        await handleMessages(messages);
+    });
+    // Fallback for older versions
+    sock.ev.on('messages', async (messages) => {
+        await handleMessages(messages);
+    });
+    // Another fallback
+    sock.ev.on('message', async (msg) => {
+        await handleMessages([msg]);
+    });
+
+    async function handleMessages(messages) {
         const m = messages[0];
-        if (!m.message) {
+        if (!m || !m.message) {
             console.log('⚠️ Message has no .message field');
             return;
         }
 
         const from = m.key.remoteJid;
-        // Log EVERY message received
-        console.log('📥 New message from:', from);
-        console.log('📄 Message key:', JSON.stringify(m.key, null, 2));
-        console.log('📄 Message types:', Object.keys(m.message));
-        
-        // Skip own messages
-        if (m.key.fromMe) {
-            console.log('⏭️ Skipping own message.');
-            return;
-        }
-        // Skip status broadcasts
-        if (from === 'status@broadcast') {
-            console.log('⏭️ Skipping status broadcast.');
-            return;
-        }
+        // Skip own messages and status broadcasts
+        if (m.key.fromMe || from === 'status@broadcast') return;
 
         // Extract text from all possible fields
         let body = '';
@@ -241,52 +222,30 @@ async function startBot() {
             body = m.message.ephemeralMessage.message.conversation;
         } else if (m.message.ephemeralMessage?.message?.extendedTextMessage?.text) {
             body = m.message.ephemeralMessage.message.extendedTextMessage.text;
-        } else {
-            // If we can't extract, log the full message for debugging
-            console.log('📭 Unknown message structure:', JSON.stringify(m.message, null, 2));
-            return;
         }
 
-        if (!body) {
-            console.log('📭 No extractable text in this message.');
-            return;
-        }
+        if (!body) return;
 
-        console.log(`📩 Extracted body: "${body}"`);
+        console.log(`📩 Received from ${from}: "${body}"`);
 
-        // Check if message starts with prefix
-        if (!body.startsWith(config.PREFIX)) {
-            console.log(`⏭️ Message does not start with prefix "${config.PREFIX}".`);
-            // For debugging, if message is "ping" without prefix, respond
-            if (body.toLowerCase() === 'ping') {
-                console.log('⚡ Responding to raw "ping" for testing.');
-                await sock.sendMessage(from, { text: 'Pong! (raw ping)' });
-            }
-            return;
-        }
+        if (!body.startsWith(config.PREFIX)) return;
 
         const args = body.slice(config.PREFIX.length).trim().split(/ +/);
         const cmdName = args.shift().toLowerCase();
-
-        console.log(`🔍 Looking for command: "${cmdName}"`);
 
         const command = commands.find(c => 
             c.pattern === cmdName || (c.alias && c.alias.includes(cmdName))
         );
 
         if (command) {
-            console.log(`⚡ Executing command: ${cmdName}`);
             try {
                 await command.function(sock, m, from, args, config);
-                console.log(`✅ Command ${cmdName} executed successfully.`);
             } catch (err) {
-                console.error(`❌ Command error for ${cmdName}:`, err);
+                console.error('❌ Command error:', err);
                 await sock.sendMessage(from, { text: '❌ An error occurred while executing the command.' });
             }
-        } else {
-            console.log(`❓ Unknown command: ${cmdName}`);
         }
-    });
+    }
 }
 
 startBot().catch(err => console.error('Fatal error:', err));

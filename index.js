@@ -9,31 +9,21 @@ import { commands } from './command.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// -------- DEBUG: Log the module structure (remove after confirming) ---------
-console.log('🔍 Baileys module keys:', Object.keys(baileys));
-console.log('🔍 Baileys module default:', baileys.default);
-// ---------------------------------------------------------------------------
-
 // -------- Safely extract makeWASocket --------
 let makeWASocket;
 if (typeof baileys.default === 'function') {
-    makeWASocket = baileys.default;                         // Default export is the function
-    console.log('✅ Using baileys.default as makeWASocket');
+    makeWASocket = baileys.default;
 } else if (typeof baileys.makeWASocket === 'function') {
-    makeWASocket = baileys.makeWASocket;                    // Named export
-    console.log('✅ Using baileys.makeWASocket');
+    makeWASocket = baileys.makeWASocket;
 } else if (typeof baileys === 'function') {
-    makeWASocket = baileys;                                  // Module itself is the function
-    console.log('✅ Using baileys directly');
+    makeWASocket = baileys;
 } else if (baileys.default && typeof baileys.default.default === 'function') {
-    makeWASocket = baileys.default.default;                  // Nested default (rare)
-    console.log('✅ Using baileys.default.default');
+    makeWASocket = baileys.default.default;
 } else {
-    console.error('❌ Could not find makeWASocket function. Available exports:', Object.keys(baileys));
+    console.error('❌ Could not find makeWASocket function. Exports:', Object.keys(baileys));
     process.exit(1);
 }
 
-// -------- Extract other utilities safely --------
 const useMultiFileAuthState = baileys.useMultiFileAuthState || baileys.default?.useMultiFileAuthState;
 const DisconnectReason = baileys.DisconnectReason || baileys.default?.DisconnectReason;
 const fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion || baileys.default?.fetchLatestBaileysVersion;
@@ -85,7 +75,27 @@ async function startBot() {
         if (connection === 'open') {
             console.log('✅ Bot connected to WhatsApp!');
             const ownerJid = config.OWNER_NUMBER + '@s.whatsapp.net';
-            await sock.sendMessage(ownerJid, { text: `*${config.BOT_NAME} is now online!*\n\nPrefix: ${config.PREFIX}\nMode: ${config.MODE}` });
+            
+            // Enhanced professional welcome message
+            const welcomeMessage = `╔══════════════════════╗
+║   🔥 *REDXBOT302* 🔥   ║
+╚══════════════════════╝
+
+✅ *Bot is now online!*
+
+📌 *Prefix:* ${config.PREFIX}
+👑 *Owner:* ${config.OWNER_NAME}
+👤 *Mode:* ${config.MODE}
+
+🔗 *Important Links:*
+• GitHub: https://github.com/AbdulRehman19721986/REDXBOT-MD
+• WhatsApp Channel: https://whatsapp.com/channel/0029VbCPnYf96H4SNehkev10
+• Telegram Group: https://t.me/TeamRedxhacker2
+• YouTube: https://youtube.com/@rootmindtech
+
+✨ *Thank you for using REDXBOT!* ✨`;
+
+            await sock.sendMessage(ownerJid, { text: welcomeMessage });
         }
         if (connection === 'close') {
             const reason = new Boom(lastDisconnect?.error).output.statusCode;

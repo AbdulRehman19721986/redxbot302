@@ -83,19 +83,6 @@ for (const file of pluginFiles) {
 }
 console.log(`✅ Loaded ${commands.length} commands.`);
 
-// -------- Add a built-in test command (always available) --------
-import { cmd } from './command.js';
-cmd({
-    pattern: 'test',
-    desc: 'Test if bot is working',
-    category: 'debug',
-    filename: 'builtin'
-},
-async (conn, mek, from, args, config) => {
-    await conn.sendMessage(from, { text: '✅ Bot is working! Commands are active.' });
-});
-console.log('🔧 Built-in test command added.');
-
 // -------- Global variables --------
 let cachedCreds = null;
 let currentSocket = null;
@@ -156,10 +143,18 @@ async function startBot() {
         defaultQueryTimeoutMs: 60000,
         syncFullHistory: true,
         getMessage: async () => undefined,
+        // Force single session
+        shouldSyncConnectionMessage: true,
+        emitOwnEvents: true,
     });
 
     currentSocket = sock;
     isConnecting = false;
+
+    // Log all events
+    sock.ev.on('*', (event, data) => {
+        console.log(`📡 Event: ${event}`, data ? '...' : '');
+    });
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -172,6 +167,7 @@ async function startBot() {
             console.log('✅ Bot connected to WhatsApp!');
             reconnectAttempts = 0;
             
+            // Send welcome message
             try {
                 const ownerJid = config.OWNER_NUMBER + '@s.whatsapp.net';
                 const welcomeMessage = `╔══════════════════════╗
@@ -205,7 +201,12 @@ async function startBot() {
             console.log(`❌ Connection closed. Status code: ${statusCode}, Reason: ${errorMessage}`);
 
             if (statusCode === DisconnectReason.loggedOut) {
-                console.log('❌ Logged out. Clearing session folder and restarting.');
+                console.log('❌ Logged out. Clearing session folder and exiting.');
+                await clearSessionFolder();
+                cachedCreds = null;
+                process.exit(1); // Railway will restart
+            } else if (statusCode === 440) { // Conflict
+                console.log('⚠️ Conflict detected (another session active). Clearing session and exiting.');
                 await clearSessionFolder();
                 cachedCreds = null;
                 process.exit(1);
@@ -226,24 +227,16 @@ async function startBot() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // -------- Universal message handler with deep debugging --------
+    // -------- Universal message handler --------
     sock.ev.on('messages.upsert', async ({ messages }) => {
         for (const m of messages) {
-            console.log('📥 Full message object:', JSON.stringify(m, (key, value) => 
-                typeof value === 'bigint' ? value.toString() : value, 2));
-
-            if (!m.message) {
-                console.log('⚠️ Message has no .message field');
-                continue;
-            }
+            console.log('📥 Message received:', m.key?.remoteJid, m.message ? 'has message' : 'no message');
+            if (!m.message) continue;
 
             const from = m.key.remoteJid;
-            if (m.key.fromMe || from === 'status@broadcast') {
-                console.log('⏭️ Skipping own message or status broadcast');
-                continue;
-            }
+            if (m.key.fromMe || from === 'status@broadcast') continue;
 
-            // Extract text from all possible fields
+            // Extract text
             let body = '';
             if (m.message.conversation) {
                 body = m.message.conversation;
@@ -253,58 +246,40 @@ async function startBot() {
                 body = m.message.imageMessage.caption;
             } else if (m.message.videoMessage?.caption) {
                 body = m.message.videoMessage.caption;
-            } else if (m.message.documentMessage?.caption) {
-                body = m.message.documentMessage.caption;
             } else if (m.message.ephemeralMessage?.message?.conversation) {
                 body = m.message.ephemeralMessage.message.conversation;
             } else if (m.message.ephemeralMessage?.message?.extendedTextMessage?.text) {
                 body = m.message.ephemeralMessage.message.extendedTextMessage.text;
-            } else if (m.message.viewOnceMessage?.message?.conversation) {
-                body = m.message.viewOnceMessage.message.conversation;
-            } else if (m.message.viewOnceMessage?.message?.imageMessage?.caption) {
-                body = m.message.viewOnceMessage.message.imageMessage.caption;
-            } else if (m.message.viewOnceMessage?.message?.videoMessage?.caption) {
-                body = m.message.viewOnceMessage.message.videoMessage.caption;
-            }
-
-            console.log(`📩 Extracted body: "${body}"`);
-
-            if (!body) {
-                console.log('📭 No extractable text in this message.');
+            } else {
                 continue;
             }
 
-            // Debug: respond to any message containing "ping" (case-insensitive)
-            if (body.toLowerCase().includes('ping')) {
-                console.log('⚡ Responding to ping (debug)');
-                await sock.sendMessage(from, { text: '🏓 Pong! (debug)' });
-            }
+            console.log(`📩 Text: "${body}"`);
 
-            if (!body.startsWith(config.PREFIX)) {
-                console.log(`⏭️ Message does not start with prefix "${config.PREFIX}"`);
+            // Built-in ping (no prefix) for testing
+            if (body.toLowerCase() === 'ping') {
+                await sock.sendMessage(from, { text: '🏓 Pong! (direct)' });
                 continue;
             }
+
+            if (!body.startsWith(config.PREFIX)) continue;
 
             const args = body.slice(config.PREFIX.length).trim().split(/ +/);
             const cmdName = args.shift().toLowerCase();
-            console.log(`🔍 Looking for command: "${cmdName}"`);
 
             const command = commands.find(c => 
                 c.pattern === cmdName || (c.alias && c.alias.includes(cmdName))
             );
 
             if (command) {
-                console.log(`⚡ Executing command: ${cmdName}`);
                 try {
                     await command.function(sock, m, from, args, config);
-                    console.log(`✅ Command ${cmdName} executed successfully.`);
                 } catch (err) {
-                    console.error(`❌ Command error for ${cmdName}:`, err);
-                    await sock.sendMessage(from, { text: '❌ An error occurred while executing the command.' });
+                    console.error(`❌ Command error:`, err);
+                    await sock.sendMessage(from, { text: '❌ Command error.' });
                 }
             } else {
-                console.log(`❓ Unknown command: ${cmdName}`);
-                await sock.sendMessage(from, { text: `❌ Unknown command "${cmdName}". Use ${config.PREFIX}menu to see available commands.` });
+                await sock.sendMessage(from, { text: `❌ Unknown command. Use ${config.PREFIX}menu` });
             }
         }
     });

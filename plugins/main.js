@@ -1,33 +1,25 @@
 import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
 import axios from 'axios';
-import fs from 'fs';
-import path from 'path';
 import { Sticker, StickerTypes } from 'wa-sticker-formatter';
 
 const __filename = fileURLToPath(import.meta.url);
 console.log('🔥 REDXBOT302 – All commands loaded.');
 
-// ==================== UTILITY FUNCTIONS ====================
+// ==================== UTILITY ====================
 function runtime(seconds) {
     seconds = Number(seconds);
     var d = Math.floor(seconds / (3600*24));
     var h = Math.floor(seconds % (3600*24) / 3600);
     var m = Math.floor(seconds % 3600 / 60);
     var s = Math.floor(seconds % 60);
-    var dDisplay = d > 0 ? d + (d == 1 ? " day, " : " days, ") : "";
-    var hDisplay = h > 0 ? h + (h == 1 ? " hour, " : " hours, ") : "";
-    var mDisplay = m > 0 ? m + (m == 1 ? " minute, " : " minutes, ") : "";
-    var sDisplay = s > 0 ? s + (s == 1 ? " second" : " seconds") : "";
-    return dDisplay + hDisplay + mDisplay + sDisplay;
+    return (d ? d + 'd ' : '') + (h ? h + 'h ' : '') + (m ? m + 'm ' : '') + (s ? s + 's' : '');
 }
 
-// Simple in‑memory mode storage
 let botMode = 'public'; // default
 
 // ==================== COMMANDS ====================
 
-// .test – to verify bot is receiving messages
 cmd({
     pattern: 'test',
     desc: 'Test command',
@@ -35,10 +27,9 @@ cmd({
     filename: __filename
 },
 async (conn, mek, from, args, config) => {
-    await conn.sendMessage(from, { text: '✅ Bot is working! Commands are active.' });
+    await conn.sendMessage(from, { text: '✅ Test works!' });
 });
 
-// .ping
 cmd({
     pattern: 'ping',
     desc: 'Check bot response time',
@@ -52,7 +43,6 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: `⏱️ *${end - start} ms*` });
 });
 
-// .menu – beautiful menu like your example
 cmd({
     pattern: 'menu',
     desc: 'Show all commands',
@@ -95,10 +85,9 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: menuText });
 });
 
-// .repo – repository info
 cmd({
     pattern: 'repo',
-    desc: 'Show bot repository info',
+    desc: 'Show repository info',
     category: 'info',
     filename: __filename
 },
@@ -107,7 +96,6 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: repoMsg });
 });
 
-// .mode – change bot mode (public/private)
 cmd({
     pattern: 'mode',
     desc: 'Change bot mode (public/private)',
@@ -123,7 +111,6 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: `✅ Bot mode is now set to *${newMode.toUpperCase()}*.` });
 });
 
-// .sticker – create sticker
 cmd({
     pattern: 'sticker',
     alias: ['s'],
@@ -155,7 +142,6 @@ async (conn, mek, from, args, config) => {
     }
 });
 
-// .tts – text to speech
 cmd({
     pattern: 'tts',
     desc: 'Text to speech',
@@ -171,7 +157,6 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { audio: buffer, mimetype: 'audio/mp4', ptt: true });
 });
 
-// .weather
 cmd({
     pattern: 'weather',
     desc: 'Get weather info',
@@ -181,12 +166,15 @@ cmd({
 async (conn, mek, from, args, config) => {
     if (!args[0]) return await conn.sendMessage(from, { text: '❌ Provide city name.' });
     const city = args.join(' ');
-    const { data } = await axios.get(`http://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=060a6bcfa19809c2cd4d97a212b19273`);
-    const msg = `*Weather in ${data.name}, ${data.sys.country}*\n🌡️ Temp: ${data.main.temp}°C\n☁️ ${data.weather[0].description}\n💧 Humidity: ${data.main.humidity}%\n💨 Wind: ${data.wind.speed} m/s`;
-    await conn.sendMessage(from, { text: msg });
+    try {
+        const { data } = await axios.get(`http://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=060a6bcfa19809c2cd4d97a212b19273`);
+        const msg = `*Weather in ${data.name}, ${data.sys.country}*\n🌡️ Temp: ${data.main.temp}°C\n☁️ ${data.weather[0].description}\n💧 Humidity: ${data.main.humidity}%\n💨 Wind: ${data.wind.speed} m/s`;
+        await conn.sendMessage(from, { text: msg });
+    } catch {
+        await conn.sendMessage(from, { text: '❌ City not found.' });
+    }
 });
 
-// .quote
 cmd({
     pattern: 'quote',
     desc: 'Random quote',
@@ -198,7 +186,6 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: `"${data.content}"\n— ${data.author}` });
 });
 
-// .fact
 cmd({
     pattern: 'fact',
     desc: 'Random fact',
@@ -210,7 +197,6 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: data.text });
 });
 
-// .calc
 cmd({
     pattern: 'calc',
     desc: 'Calculate expression',
@@ -226,7 +212,6 @@ async (conn, mek, from, args, config) => {
     }
 });
 
-// .short – URL shortener
 cmd({
     pattern: 'short',
     desc: 'Shorten URL',
@@ -240,7 +225,6 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: data });
 });
 
-// .owner – owner contact
 cmd({
     pattern: 'owner',
     desc: 'Show owner contact',
@@ -257,7 +241,6 @@ async (conn, mek, from, args, config) => {
     });
 });
 
-// .alive
 cmd({
     pattern: 'alive',
     desc: 'Check bot status',
@@ -268,7 +251,6 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: config.LIVE_MSG || 'I am alive!' });
 });
 
-// .restart
 cmd({
     pattern: 'restart',
     desc: 'Restart bot',
@@ -280,9 +262,7 @@ async (conn, mek, from, args, config) => {
     process.exit(0);
 });
 
-// .kick, .add, .promote, .demote, .mute, .unmute, .invite, .revoke, .tag – group admin commands
-// (You can add them similarly – for brevity I'll include a few)
-
+// Group admin commands (add more as needed)
 cmd({
     pattern: 'kick',
     desc: 'Remove member from group',
@@ -301,7 +281,6 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: `✅ @${user.split('@')[0]} removed.`, mentions: [user] });
 });
 
-// .add
 cmd({
     pattern: 'add',
     desc: 'Add member to group',
@@ -320,6 +299,118 @@ async (conn, mek, from, args, config) => {
     await conn.sendMessage(from, { text: `✅ @${args[0]} added.`, mentions: [user] });
 });
 
-// .promote, .demote, .mute, .unmute, .invite, .revoke, .tag – you can add similarly.
+cmd({
+    pattern: 'promote',
+    desc: 'Promote member to admin',
+    category: 'admin',
+    onlyGroup: true,
+    filename: __filename
+},
+async (conn, mek, from, args, config) => {
+    const participants = await conn.groupMetadata(from);
+    const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
+    const isBotAdmin = participants.participants.some(p => p.id === botJid && p.admin);
+    if (!isBotAdmin) return await conn.sendMessage(from, { text: '❌ I need to be admin.' });
+    let user = mek.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || mek.message.extendedTextMessage?.contextInfo?.participant;
+    if (!user) return await conn.sendMessage(from, { text: '❌ Mention or reply to the user.' });
+    await conn.groupParticipantsUpdate(from, [user], 'promote');
+    await conn.sendMessage(from, { text: `✅ @${user.split('@')[0]} promoted.`, mentions: [user] });
+});
+
+cmd({
+    pattern: 'demote',
+    desc: 'Demote admin to member',
+    category: 'admin',
+    onlyGroup: true,
+    filename: __filename
+},
+async (conn, mek, from, args, config) => {
+    const participants = await conn.groupMetadata(from);
+    const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
+    const isBotAdmin = participants.participants.some(p => p.id === botJid && p.admin);
+    if (!isBotAdmin) return await conn.sendMessage(from, { text: '❌ I need to be admin.' });
+    let user = mek.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || mek.message.extendedTextMessage?.contextInfo?.participant;
+    if (!user) return await conn.sendMessage(from, { text: '❌ Mention or reply to the user.' });
+    await conn.groupParticipantsUpdate(from, [user], 'demote');
+    await conn.sendMessage(from, { text: `✅ @${user.split('@')[0]} demoted.`, mentions: [user] });
+});
+
+cmd({
+    pattern: 'mute',
+    desc: 'Mute group',
+    category: 'admin',
+    onlyGroup: true,
+    filename: __filename
+},
+async (conn, mek, from, args, config) => {
+    const participants = await conn.groupMetadata(from);
+    const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
+    const isBotAdmin = participants.participants.some(p => p.id === botJid && p.admin);
+    if (!isBotAdmin) return await conn.sendMessage(from, { text: '❌ I need to be admin.' });
+    await conn.groupSettingUpdate(from, 'announcement');
+    await conn.sendMessage(from, { text: '🔇 Group muted.' });
+});
+
+cmd({
+    pattern: 'unmute',
+    desc: 'Unmute group',
+    category: 'admin',
+    onlyGroup: true,
+    filename: __filename
+},
+async (conn, mek, from, args, config) => {
+    const participants = await conn.groupMetadata(from);
+    const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
+    const isBotAdmin = participants.participants.some(p => p.id === botJid && p.admin);
+    if (!isBotAdmin) return await conn.sendMessage(from, { text: '❌ I need to be admin.' });
+    await conn.groupSettingUpdate(from, 'not_announcement');
+    await conn.sendMessage(from, { text: '🔊 Group unmuted.' });
+});
+
+cmd({
+    pattern: 'invite',
+    desc: 'Get group invite link',
+    category: 'admin',
+    onlyGroup: true,
+    filename: __filename
+},
+async (conn, mek, from, args, config) => {
+    const participants = await conn.groupMetadata(from);
+    const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
+    const isBotAdmin = participants.participants.some(p => p.id === botJid && p.admin);
+    if (!isBotAdmin) return await conn.sendMessage(from, { text: '❌ I need to be admin.' });
+    const code = await conn.groupInviteCode(from);
+    await conn.sendMessage(from, { text: `📎 Invite link: https://chat.whatsapp.com/${code}` });
+});
+
+cmd({
+    pattern: 'revoke',
+    desc: 'Revoke group invite link',
+    category: 'admin',
+    onlyGroup: true,
+    filename: __filename
+},
+async (conn, mek, from, args, config) => {
+    const participants = await conn.groupMetadata(from);
+    const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
+    const isBotAdmin = participants.participants.some(p => p.id === botJid && p.admin);
+    if (!isBotAdmin) return await conn.sendMessage(from, { text: '❌ I need to be admin.' });
+    await conn.groupRevokeInvite(from);
+    await conn.sendMessage(from, { text: '🔄 Invite link revoked.' });
+});
+
+cmd({
+    pattern: 'tag',
+    desc: 'Tag all members',
+    category: 'group',
+    onlyGroup: true,
+    filename: __filename
+},
+async (conn, mek, from, args, config) => {
+    const participants = await conn.groupMetadata(from);
+    const jids = participants.participants.map(p => p.id);
+    let text = args.join(' ') || '📢 @all';
+    await conn.sendMessage(from, { text, mentions: jids });
+});
 
 console.log('✅ All commands registered.');

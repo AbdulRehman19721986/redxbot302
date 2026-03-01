@@ -1,5 +1,6 @@
 const handler = require('../lib/commandHandler');
 const settings = require('../settings');
+const axios = require('axios');
 
 function formatUptime(seconds) {
     const days = Math.floor(seconds / 86400);
@@ -22,8 +23,6 @@ module.exports = {
 
         const uptime = process.uptime();
         const categories = {};
-
-        // Group commands by category
         handler.commands.forEach((plugin, cmd) => {
             const cat = plugin.category || 'misc';
             if (!categories[cat]) categories[cat] = [];
@@ -36,7 +35,6 @@ module.exports = {
         menuText += `┃ 📦 *Commands:* ${handler.commands.size}\n`;
         menuText += `┃━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
 
-        // Show all commands, no truncation
         for (const [cat, cmds] of Object.entries(categories)) {
             menuText += `┃ 🔹 *${cat.toUpperCase()}*\n`;
             cmds.forEach(cmd => {
@@ -48,6 +46,12 @@ module.exports = {
         menuText += `✨ *Powered by ${settings.botOwner} & ${settings.secondOwner}* ✨\n`;
         menuText += `🔗 Join Channel: ${settings.channelLink}`;
 
-        await sock.sendMessage(chatId, { text: menuText }, { quoted: message });
+        try {
+            const response = await axios.get(settings.botDp, { responseType: 'arraybuffer' });
+            const buffer = Buffer.from(response.data, 'binary');
+            await sock.sendMessage(chatId, { image: buffer, caption: menuText }, { quoted: message });
+        } catch (e) {
+            await sock.sendMessage(chatId, { text: menuText }, { quoted: message });
+        }
     }
 };

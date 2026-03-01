@@ -1,93 +1,61 @@
-const axios = require('axios');
+const settings = require('../settings');
 
 module.exports = {
-  command: 'pair',
-  aliases: ['paircode', 'session', 'getsession', 'sessionid'],
-  category: 'general',
-  description: 'Get session id for REDXBOT302',
-  usage: '.pair 92305395XXXX',
-  
-  async handler(sock, message, args, context = {}) {
-    const { chatId } = context;
+    command: 'pair',
+    aliases: ['paircode', 'connect'],
+    category: 'info',
+    description: 'Get a pairing code to connect your WhatsApp',
+    usage: '.pair <phone number>',
+    async handler(sock, message, args, context) {
+        const chatId = context.chatId || message.key.remoteJid;
 
-    const forwardInfo = {
-      forwardingScore: 1,
-      isForwarded: true,
-      forwardedNewsletterMessageInfo: {
-        newsletterJid: '120363319098372999@newsletter',
-        newsletterName: 'REDXBOT302',
-        serverMessageId: -1
-      }
-    };
-
-    let query = args.join('').trim();
-    if (!query) {
-      return await sock.sendMessage(chatId, {
-        text: "❌ *Missing Number*\nExample: .pair 92305395XXXX",
-        contextInfo: forwardInfo
-      }, { quoted: message });
-    }
-
-    const number = query.replace(/[^0-9]/g, '');
-
-    if (number.length < 10 || number.length > 15) {
-      return await sock.sendMessage(chatId, {
-        text: "❌ *Invalid Format*\nPlease provide the number with country code but without + or spaces.",
-        contextInfo: forwardInfo
-      }, { quoted: message });
-    }
-
-    await sock.sendMessage(chatId, {
-      text: "⚡ *Requesting code from server...*",
-      contextInfo: forwardInfo
-    }, { quoted: message });
-
-    try {
-      const response = await axios.get(`https://mega-pairing.onrender.com/pair?number=${number}`, {
-        timeout: 60000
-      });
-
-      if (response.data && response.data.code) {
-        const pairingCode = response.data.code;
-
-        if (pairingCode.includes("Unavailable") || pairingCode.includes("Error")) {
-          throw new Error("Server is busy");
+        // Check if already registered
+        if (sock.authState?.creds?.registered) {
+            return await sock.sendMessage(chatId, { 
+                text: `✅ *Your WhatsApp is already connected!*\n\nBot is ready to use.` 
+            }, { quoted: message });
         }
 
-        const successText = `✅ *REDXBOT302 PAIRING CODE*\n\n` +
-                            `Code: *${pairingCode}*\n\n` +
-                            `*How to use:*\n` +
-                            `1. Open WhatsApp Settings\n` +
-                            `2. Tap 'Linked Devices'\n` +
-                            `3. Tap 'Link a Device'\n` +
-                            `4. Select 'Link with phone number instead'\n` +
-                            `5. Enter the code above.`;
+        // Get phone number
+        let phoneNumber = args[0];
+        if (!phoneNumber) {
+            const quoted = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+            if (quoted) {
+                phoneNumber = quoted.conversation || quoted.extendedTextMessage?.text;
+            }
+        }
+        if (!phoneNumber) {
+            return await sock.sendMessage(chatId, { 
+                text: `❌ Please provide your phone number.\nExample: .pair 61468259338` 
+            }, { quoted: message });
+        }
 
-        await sock.sendMessage(chatId, {
-          text: successText,
-          contextInfo: forwardInfo
-        }, { quoted: message });
+        phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
+        if (phoneNumber.length < 10) {
+            return await sock.sendMessage(chatId, { text: '❌ Invalid phone number. Include country code.' }, { quoted: message });
+        }
 
-      } else {
-        throw new Error("Invalid response format");
-      }
+        await sock.sendMessage(chatId, { text: '⏳ Requesting pairing code...' }, { quoted: message });
 
-    } catch (error) {
-      console.error('Pairing Plugin Error:', error.message);
-      
-      let errorMsg = "❌ *Pairing Failed*\nReason: ";
-      if (error.code === 'ECONNABORTED') {
-        errorMsg += "Server timeout. Please try again in 1 minute.";
-      } else if (error.response?.status === 400) {
-        errorMsg += "Invalid phone number format.";
-      } else {
-        errorMsg += "The server is currently offline or busy. Try again later.";
-      }
+        try {
+            let code = await sock.requestPairingCode(phoneNumber);
+            code = code?.match(/.{1,4}/g)?.join('-') || code;
 
-      await sock.sendMessage(chatId, {
-        text: errorMsg,
-        contextInfo: forwardInfo
-      }, { quoted: message });
+            const reply = `🔑 *Your Pairing Code*\n\n` +
+                `\`\`\`${code}\`\`\`\n\n` +
+                `1. Open WhatsApp on your phone.\n` +
+                `2. Go to *Settings* → *Linked Devices* → *Link a Device*.\n` +
+                `3. Enter this code.\n\n` +
+                `👑 *Owner:* ${settings.botOwner} & ${settings.secondOwner}\n` +
+                `🔗 *Channel:* ${settings.channelLink}\n` +
+                `📢 *Group:* ${settings.whatsappGroup}`;
+
+            await sock.sendMessage(chatId, { text: reply }, { quoted: message });
+        } catch (error) {
+            console.error('Pairing error:', error);
+            await sock.sendMessage(chatId, { 
+                text: '❌ Failed to generate pairing code. Please try again later.' 
+            }, { quoted: message });
+        }
     }
-  }
 };

@@ -5,6 +5,7 @@ const settings = {
   timeZone: 'Asia/Karachi',
   botName: 'REDXBOT302',
   botOwner: 'Abdul Rehman Rajpoot',
+  secondOwner: 'Muzamil Khan',
   ownerNumber: '61468259338',
   giphyApiKey: 'qnl7ssQChTdPjsKta2Ax2LMaGXz303tq',
   commandMode: 'public',

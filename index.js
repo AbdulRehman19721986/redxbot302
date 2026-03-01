@@ -223,7 +223,7 @@ async function startBot() {
         const sock = makeWASocket({
             version,
             logger: pino({ level: 'silent' }),
-            printQRInTerminal: !pairingCode,
+            printQRInTerminal: false, // we handle QR via pairing code
             browser: Browsers.macOS('Chrome'),
             auth: {
                 creds: state.creds,
@@ -343,7 +343,7 @@ async function startBot() {
                                 forwardingScore: 1,
                                 isForwarded: true,
                                 forwardedNewsletterMessageInfo: {
-                                    newsletterJid: '120363405513439052@newsletter', // You can replace with your own channel ID
+                                    newsletterJid: '120363405513439052@newsletter',
                                     newsletterName: 'REDXBOT302',
                                     serverMessageId: -1
                                 }
@@ -529,6 +529,20 @@ async function startBot() {
                     } catch (error) {
                         printLog('error', `Error deleting session: ${error.message}`);
                     }
+                } else if (statusCode === 440) {
+                    printLog('error', `
+╔════════════════════════════════════════════════════════╗
+║                   ❗ CONFLICT DETECTED                   ║
+╠════════════════════════════════════════════════════════╣
+║ Another device is using this WhatsApp number.           ║
+║ The bot cannot stay connected.                          ║
+╟────────────────────────────────────────────────────────╢
+║ ✅ FIX:                                                  ║
+║ 1. Open WhatsApp on your phone.                         ║
+║ 2. Go to Settings → Linked Devices.                     ║
+║ 3. Log out from ALL devices.                            ║
+║ 4. Restart this bot.                                    ║
+╚════════════════════════════════════════════════════════╝`);
                 }
                 
                 if (shouldReconnect) {
@@ -681,5 +695,4 @@ fs.watchFile(file, () => {
     printLog('info', 'index.js updated, reloading...');
     delete require.cache[file];
     require(file);
-
 });

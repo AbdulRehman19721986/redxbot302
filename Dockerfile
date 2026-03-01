@@ -1,6 +1,5 @@
 FROM node:20-alpine
 
-# Install required system dependencies
 RUN apk add --no-cache \
     git \
     ffmpeg \
@@ -10,9 +9,11 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-COPY package*.json ./
+# Copy package files AND rebrand.js + datamain.txt so postinstall can run
+COPY package*.json rebrand.js datamain.txt ./
 RUN npm install --force --loglevel=error
 
+# Copy the rest of the application
 COPY . .
 
 RUN mkdir -p tmp data

@@ -1,6 +1,12 @@
 FROM node:20-alpine
 
-RUN apk add --no-cache git ffmpeg imagemagick webp
+# Install required system dependencies
+RUN apk add --no-cache \
+    git \
+    ffmpeg \
+    imagemagick \
+    libwebp \
+    libwebp-tools
 
 WORKDIR /app
 

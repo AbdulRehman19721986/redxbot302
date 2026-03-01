@@ -18,6 +18,14 @@ function getNeonMenu() {
     const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
     const cpuLoad = os.loadavg()[0].toFixed(2);
     
+    // Group commands by category
+    const categories = {};
+    commands.forEach(cmd => {
+        const cat = cmd.category || 'misc';
+        if (!categories[cat]) categories[cat] = [];
+        categories[cat].push(cmd.command);
+    });
+
     let menuText = `╭━━『 *${settings.botName}* 』━⬣\n`;
     menuText += `┃ ✨ Bot: ${settings.botName}\n`;
     menuText += `┃ 🔧 Prefix: ${settings.prefixes.join(', ')}\n`;
@@ -27,45 +35,22 @@ function getNeonMenu() {
     menuText += `┃ 💾 RAM: ${ramUsage} MB\n`;
     menuText += `┃ 🖥️ CPU: ${cpuLoad}\n`;
     menuText += `┃ 🕒 Uptime: ${formatUptime(uptime)}\n`;
-    menuText += `┃━━━ INFO ━✦\n`;
-    menuText += `┃ ➤ .owner\n`;
-    menuText += `┃ ➤ .repo\n`;
-    menuText += `┃ ➤ .alive\n`;
-    menuText += `┃ ➤ .ping\n`;
-    menuText += `┃━━━ DOWNLOAD ━✦\n`;
-    menuText += `┃ ➤ .play\n`;
-    menuText += `┃ ➤ .video\n`;
-    menuText += `┃ ➤ .drama\n`;
-    menuText += `┃ ➤ .movie\n`;
-    menuText += `┃ ➤ .tiktok\n`;
-    menuText += `┃ ➤ .instagram\n`;
-    menuText += `┃ ➤ .twitter\n`;
-    menuText += `┃━━━ AI ━✦\n`;
-    menuText += `┃ ➤ .gpt\n`;
-    menuText += `┃ ➤ .imagine\n`;
-    menuText += `┃━━━ GENERAL ━✦\n`;
-    menuText += `┃ ➤ .sticker\n`;
-    menuText += `┃ ➤ .tts\n`;
-    menuText += `┃ ➤ .weather\n`;
-    menuText += `┃ ➤ .quote\n`;
-    menuText += `┃ ➤ .calc\n`;
-    menuText += `┃━━━ GROUP ━✦\n`;
-    menuText += `┃ ➤ .tagall\n`;
-    menuText += `┃ ➤ .kick\n`;
-    menuText += `┃ ➤ .add\n`;
-    menuText += `┃ ➤ .promote\n`;
-    menuText += `┃ ➤ .demote\n`;
-    menuText += `┃━━━ OWNER ━✦\n`;
-    menuText += `┃ ➤ .setpp\n`;
-    menuText += `┃ ➤ .restart\n`;
-    menuText += `┃━━━ MISC ━✦\n`;
-    menuText += `┃ ➤ .animu\n`;
-    menuText += `┃ ➤ .audiofx\n`;
-    menuText += `┃ ➤ .canvas\n`;
-    menuText += `┃ …\n`;
+
+    // Add categories and their commands
+    const sortedCategories = Object.keys(categories).sort();
+    for (const cat of sortedCategories) {
+        menuText += `┃━━━ ${cat.toUpperCase()} ━✦\n`;
+        categories[cat].slice(0, 5).forEach(cmd => {
+            menuText += `┃ ➤ .${cmd}\n`;
+        });
+        if (categories[cat].length > 5) {
+            menuText += `┃ … (+${categories[cat].length - 5} more)\n`;
+        }
+    }
+
     menuText += `╰━━━━━━━━━━━━━⬣\n\n`;
-    menuText += `✨ *Powered by Abdul Rehman Rajpoot & Muzamil Khan* ✨\n`;
-    menuText += `🔗 Join our Channel: https://whatsapp.com/channel/0029VbCPnYf96H4SNehkev10`;
+    menuText += `✨ *Powered by ${settings.botOwner} & Muzamil Khan* ✨\n`;
+    menuText += `🔗 Join our Channel: ${settings.channelLink}`;
     return menuText;
 }
 
@@ -77,7 +62,22 @@ module.exports = {
     usage: '.menu',
     async handler(sock, message, args, context) {
         const chatId = context.chatId || message.key.remoteJid;
+        
+        // Send an emoji reaction to indicate menu is loading
+        await sock.sendMessage(chatId, { react: { text: '📋', key: message.key } });
+        
         const menuText = getNeonMenu();
-        await sock.sendMessage(chatId, { text: menuText }, { quoted: message });
+        // Try to send image + caption if profile picture is available
+        try {
+            const response = await fetch(settings.botDp || 'https://files.catbox.moe/s36b12.jpg');
+            const buffer = await response.arrayBuffer();
+            await sock.sendMessage(chatId, { 
+                image: Buffer.from(buffer), 
+                caption: menuText 
+            }, { quoted: message });
+        } catch (e) {
+            // Fallback to text only
+            await sock.sendMessage(chatId, { text: menuText }, { quoted: message });
+        }
     }
 };

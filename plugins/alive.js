@@ -1,24 +1,28 @@
 const os = require('os');
 const process = require('process');
-const settings = require('../settings');
 
 module.exports = {
   command: 'alive',
-  aliases: ['status'],
+  aliases: ['status', 'bot'],
   category: 'info',
-  description: 'Check bot status',
-  usage: '.alive',
+  description: 'Check if bot is alive',
   async handler(sock, message, args, context) {
     const chatId = context.chatId || message.key.remoteJid;
+
     const uptime = process.uptime();
+    const hours = Math.floor(uptime / 3600);
+    const minutes = Math.floor((uptime % 3600) / 60);
+    const seconds = Math.floor(uptime % 60);
     const ram = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
     const cpu = os.loadavg()[0].toFixed(2);
-    const text = `🤖 *${settings.botName} is alive!*\n\n` +
-      `⏱️ Uptime: ${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m\n` +
-      `💾 RAM: ${ram} MB\n` +
-      `🖥️ CPU: ${cpu}\n\n` +
-      `🔗 Channel: ${settings.channelLink}\n` +
-      `👑 Owner: ${settings.botOwner} & Muzamil Khan`;
+
+    const text = `🤖 *REDXBOT302 is alive!*\n\n` +
+      `⏱️ *Uptime:* ${hours}h ${minutes}m ${seconds}s\n` +
+      `💾 *RAM:* ${ram} MB\n` +
+      `🖥️ *CPU Load:* ${cpu}\n\n` +
+      `✨ *Powered by Abdul Rehman Rajpoot & Muzamil Khan* ✨\n` +
+      `🔗 Join Channel: https://whatsapp.com/channel/0029VbCPnYf96H4SNehkev10`;
+
     await sock.sendMessage(chatId, { text }, { quoted: message });
   }
 };

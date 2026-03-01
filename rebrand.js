@@ -22,13 +22,13 @@ const brand = {
     telegramGroup: extract(/\* Telegram Group:\s+(https?.+)/i) || 'https://t.me/TeamRedxhacker2',
     youtube: extract(/\* YouTube:\s+(https?.+)/i) || 'https://youtube.com/@rootmindtech',
     botDp: extract(/botdp image\s+(https?.+)/i) || 'https://files.catbox.moe/s36b12.jpg',
-    channelJid: '120363405513439052@newsletter', // your channel JID
+    channelJid: extract(/my group news letter id\s*=\s*([^\s]+)/i) || '120363405513439052@newsletter',
 };
 
 // ==================== REPLACEMENT RULES ====================
 const REPLACEMENTS = [
     // Names and brands
-    ['GlobalTechInfo', brand.ownerName.replace(/\s+/g, '')], // but careful, we'll replace full names separately
+    ['GlobalTechInfo', brand.ownerName.replace(/\s+/g, '')],
     ['Qasim Ali', `${brand.ownerName} & ${brand.secondOwner}`],
     ['MEGA-MD', 'REDXBOT302'],
     ['MEGA MD', 'REDXBOT302'],
@@ -45,8 +45,6 @@ const REPLACEMENTS = [
     // Owner name display
     ['Qasim Ali', `${brand.ownerName} & ${brand.secondOwner}`],
     ['GlobalTechInfo', brand.ownerName.replace(/\s+/g, '')],
-    ['Abdul Rehman Rajpoot', brand.ownerName], // ensure it's consistent
-    ['Muzamil Khan', brand.secondOwner],
 
     // URLs
     ['https://whatsapp.com/channel/0029VagJIAr3bbVBCpEkAM07', brand.whatsappChannel],
@@ -121,13 +119,6 @@ function applyReplacements(content) {
     return content;
 }
 
-function addCredits(content) {
-    // In menu.js or similar files, add a line with "Powered by" after the menu
-    // This is a bit heuristic – we can search for a pattern like "┃ …" and append.
-    // For simplicity, we'll just let the replacement handle it, but we can add a specific insertion.
-    return content;
-}
-
 // ==================== MAIN ====================
 function rebrandAll() {
     console.log('🔍 Scanning for files to rebrand...');
@@ -166,7 +157,6 @@ function rebrandAll() {
         let settingsContent = fs.readFileSync(settingsPath, 'utf8');
         const originalSettings = settingsContent;
         settingsContent = applyReplacements(settingsContent);
-        // Update specific fields
         settingsContent = settingsContent.replace(/packname:\s*'[^']*'/, `packname: 'REDXBOT302'`);
         settingsContent = settingsContent.replace(/author:\s*'[^']*'/, `author: '${brand.ownerName}'`);
         settingsContent = settingsContent.replace(/botOwner:\s*'[^']*'/, `botOwner: '${brand.ownerName}'`);
@@ -180,7 +170,7 @@ function rebrandAll() {
         }
     }
 
-    // Update config.js if needed (owner numbers)
+    // Update config.js if needed
     const configPath = path.join(__dirname, 'config.js');
     if (fs.existsSync(configPath)) {
         let configContent = fs.readFileSync(configPath, 'utf8');

@@ -52,6 +52,23 @@ const {
 const settings = require('./settings');
 const commandHandler = require('./lib/commandHandler');
 
+// ==================== GLOBAL FOOTER ====================
+const FOOTER = `\n\n✨ *Powered by Abdul Rehman Rajpoot & Muzamil Khan* ✨\n🔗 Join Channel: ${settings.channelLink}`;
+
+// ==================== MONKEY-PATCH sock.sendMessage TO ADD FOOTER ====================
+// We'll patch after sock creation in startBot().
+
+// ==================== EMOJI REACTION SYSTEM ====================
+async function sendReaction(sock, message, emoji) {
+    try {
+        await sock.sendMessage(message.key.remoteJid, {
+            react: { text: emoji, key: message.key }
+        });
+    } catch (e) {
+        // ignore
+    }
+}
+
 store.readFromFile();
 setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000);
 
@@ -223,7 +240,7 @@ async function startBot() {
         const sock = makeWASocket({
             version,
             logger: pino({ level: 'silent' }),
-            printQRInTerminal: false, // we handle QR via pairing code
+            printQRInTerminal: false,
             browser: Browsers.macOS('Chrome'),
             auth: {
                 creds: state.creds,
@@ -242,6 +259,15 @@ async function startBot() {
             connectTimeoutMs: 60000,
             keepAliveIntervalMs: 10000,
         });
+
+        // ==================== PATCH sendMessage TO ADD FOOTER ====================
+        const originalSend = sock.sendMessage;
+        sock.sendMessage = async function (jid, content, options = {}) {
+            if (content.text && !content.text.includes('Powered by')) {
+                content.text += FOOTER;
+            }
+            return originalSend.call(this, jid, content, options);
+        };
 
         const originalSendPresenceUpdate = sock.sendPresenceUpdate;
         const originalReadMessages = sock.readMessages;
@@ -332,6 +358,32 @@ async function startBot() {
                     sock.msgRetryCounterCache.clear();
                 }
 
+                // ==================== CUSTOM .pair COMMAND ====================
+                let text = '';
+                if (mek.message.conversation) text = mek.message.conversation;
+                else if (mek.message.extendedTextMessage?.text) text = mek.message.extendedTextMessage.text;
+                if (text.startsWith('.pair') || text.startsWith('!pair') || text.startsWith('/pair') || text.startsWith('#pair')) {
+                    // Check if session is already registered
+                    if (state.creds?.registered === true) {
+                        await sendReaction(sock, mek, '✅');
+                        await sock.sendMessage(mek.key.remoteJid, { 
+                            text: `✅ *Your WhatsApp is already connected!*\n\nNo need to pair again.` 
+                        }, { quoted: mek });
+                        return;
+                    }
+                    // If not registered, show pairing instructions
+                    await sendReaction(sock, mek, '🔑');
+                    const msg = `🔑 *REDXBOT302 Pairing*\n\n` +
+                        `👑 Owner: ${settings.botOwner}\n` +
+                        `📞 Number: ${settings.ownerNumber}\n` +
+                        `🔗 Channel: ${settings.channelLink}\n\n` +
+                        `To get a pairing code, use the environment variable PAIRING_NUMBER or wait for the bot to prompt.\n\n` +
+                        `If you haven't set PAIRING_NUMBER, restart the bot and enter your number when asked.`;
+                    await sock.sendMessage(mek.key.remoteJid, { text: msg }, { quoted: mek });
+                    return;
+                }
+
+                // If not a command, pass to message handler
                 try {
                     await handleMessages(sock, chatUpdate);
                 } catch (err) {
@@ -343,7 +395,7 @@ async function startBot() {
                                 forwardingScore: 1,
                                 isForwarded: true,
                                 forwardedNewsletterMessageInfo: {
-                                    newsletterJid: '120363405513439052@newsletter',
+                                    newsletterJid: settings.channelJid || '120363405513439052@newsletter',
                                     newsletterName: 'REDXBOT302',
                                     serverMessageId: -1
                                 }
@@ -486,12 +538,12 @@ async function startBot() {
                     const ghostStatus = (ghostMode && ghostMode.enabled) ? '\n👻 Stealth Mode: ACTIVE' : '';
                     
                     await sock.sendMessage(botNumber, {
-                        text: `🤖 REDXBOT302 Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅ Join our channel: https://whatsapp.com/channel/0029VbCPnYf96H4SNehkev10`,
+                        text: `🤖 REDXBOT302 Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅ Join our channel: ${settings.channelLink}`,
                         contextInfo: {
                             forwardingScore: 1,
                             isForwarded: true,
                             forwardedNewsletterMessageInfo: {
-                                newsletterJid: '120363405513439052@newsletter',
+                                newsletterJid: settings.channelJid || '120363405513439052@newsletter',
                                 newsletterName: 'REDXBOT302',
                                 serverMessageId: -1
                             }

@@ -3,6 +3,10 @@ const path = require('path');
 
 // ==================== LOAD BRAND DATA FROM datamain.txt ====================
 const datamainPath = path.join(__dirname, 'datamain.txt');
+if (!fs.existsSync(datamainPath)) {
+    console.error('❌ datamain.txt not found!');
+    process.exit(1);
+}
 const datamainContent = fs.readFileSync(datamainPath, 'utf8');
 
 function extract(pattern) {
@@ -27,12 +31,12 @@ const brand = {
 
 // ==================== REPLACEMENT RULES ====================
 const REPLACEMENTS = [
-    // Names and brands
+    // Names
     ['GlobalTechInfo', brand.ownerName.replace(/\s+/g, '')],
     ['Qasim Ali', `${brand.ownerName} & ${brand.secondOwner}`],
     ['MEGA-MD', 'REDXBOT302'],
     ['MEGA MD', 'REDXBOT302'],
-    ['MEGA AI', 'REDXBOT302'],
+    ['MEGA PRO', 'REDXBOT302'],
     ['GlobalTechBots', 'TeamRedxhacker2'],
 
     // Numbers
@@ -40,14 +44,10 @@ const REPLACEMENTS = [
     ['923051391007', brand.ownerNumber],
     ['923306137477', brand.ownerNumber],
     ['923051391005', brand.ownerNumber],
-    ['923051391005', brand.ownerNumber],
-
-    // Owner name display
-    ['Qasim Ali', `${brand.ownerName} & ${brand.secondOwner}`],
-    ['GlobalTechInfo', brand.ownerName.replace(/\s+/g, '')],
 
     // URLs
     ['https://whatsapp.com/channel/0029VagJIAr3bbVBCpEkAM07', brand.whatsappChannel],
+    ['https://t.me/Global_TechInfo', brand.telegramGroup],
     ['https://t.me/GlobalTechBots', brand.telegramGroup],
     ['https://youtube.com/@GlobalTechInfo', brand.youtube],
     ['https://github.com/GlobalTechInfo/MEGA-MD', brand.githubMain],
@@ -55,16 +55,12 @@ const REPLACEMENTS = [
     ['https://github.com/AbdulRehman19721986/REDXBOT-MD', brand.githubMain],
     ['https://github.com/AbdulRehman19721986/redxbot302', brand.githubRepo],
 
-    // Channel JID
+    // Newsletter JID
     ['120363319098372999@newsletter', brand.channelJid],
 
-    // Newsletter name
+    // Channel name in newsletterInfo
     ["newsletterName: 'MEGA MD'", "newsletterName: 'REDXBOT302'"],
     ['newsletterName: "MEGA MD"', 'newsletterName: "REDXBOT302"'],
-
-    // Fallback bot name
-    ["botname || 'MEGA-MD'", "botname || 'REDXBOT302'"],
-    ['botname || "MEGA-MD"', 'botname || "REDXBOT302"'],
 
     // Profile picture
     ['https://image2url.com/r2/default/images/1772252008593-2690797c-4bd7-431e-b1f7-0f6ea21f7320.jpg', brand.botDp],
@@ -151,7 +147,7 @@ function rebrandAll() {
         });
     });
 
-    // Also update settings.js
+    // Update settings.js
     const settingsPath = path.join(__dirname, 'settings.js');
     if (fs.existsSync(settingsPath)) {
         let settingsContent = fs.readFileSync(settingsPath, 'utf8');
@@ -170,7 +166,7 @@ function rebrandAll() {
         }
     }
 
-    // Update config.js if needed
+    // Update config.js if needed (pairing number)
     const configPath = path.join(__dirname, 'config.js');
     if (fs.existsSync(configPath)) {
         let configContent = fs.readFileSync(configPath, 'utf8');

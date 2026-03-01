@@ -55,20 +55,6 @@ const commandHandler = require('./lib/commandHandler');
 // ==================== GLOBAL FOOTER ====================
 const FOOTER = `\n\n✨ *Powered by Abdul Rehman Rajpoot & Muzamil Khan* ✨\n🔗 Join Channel: ${settings.channelLink}`;
 
-// ==================== MONKEY-PATCH sock.sendMessage TO ADD FOOTER ====================
-// We'll patch after sock creation in startBot().
-
-// ==================== EMOJI REACTION SYSTEM ====================
-async function sendReaction(sock, message, emoji) {
-    try {
-        await sock.sendMessage(message.key.remoteJid, {
-            react: { text: emoji, key: message.key }
-        });
-    } catch (e) {
-        // ignore
-    }
-}
-
 store.readFromFile();
 setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000);
 
@@ -240,7 +226,7 @@ async function startBot() {
         const sock = makeWASocket({
             version,
             logger: pino({ level: 'silent' }),
-            printQRInTerminal: false,
+            printQRInTerminal: !pairingCode,
             browser: Browsers.macOS('Chrome'),
             auth: {
                 creds: state.creds,
@@ -358,32 +344,6 @@ async function startBot() {
                     sock.msgRetryCounterCache.clear();
                 }
 
-                // ==================== CUSTOM .pair COMMAND ====================
-                let text = '';
-                if (mek.message.conversation) text = mek.message.conversation;
-                else if (mek.message.extendedTextMessage?.text) text = mek.message.extendedTextMessage.text;
-                if (text.startsWith('.pair') || text.startsWith('!pair') || text.startsWith('/pair') || text.startsWith('#pair')) {
-                    // Check if session is already registered
-                    if (state.creds?.registered === true) {
-                        await sendReaction(sock, mek, '✅');
-                        await sock.sendMessage(mek.key.remoteJid, { 
-                            text: `✅ *Your WhatsApp is already connected!*\n\nNo need to pair again.` 
-                        }, { quoted: mek });
-                        return;
-                    }
-                    // If not registered, show pairing instructions
-                    await sendReaction(sock, mek, '🔑');
-                    const msg = `🔑 *REDXBOT302 Pairing*\n\n` +
-                        `👑 Owner: ${settings.botOwner}\n` +
-                        `📞 Number: ${settings.ownerNumber}\n` +
-                        `🔗 Channel: ${settings.channelLink}\n\n` +
-                        `To get a pairing code, use the environment variable PAIRING_NUMBER or wait for the bot to prompt.\n\n` +
-                        `If you haven't set PAIRING_NUMBER, restart the bot and enter your number when asked.`;
-                    await sock.sendMessage(mek.key.remoteJid, { text: msg }, { quoted: mek });
-                    return;
-                }
-
-                // If not a command, pass to message handler
                 try {
                     await handleMessages(sock, chatUpdate);
                 } catch (err) {
@@ -533,24 +493,28 @@ async function startBot() {
                 
                 console.log(chalk.yellow(`🌿 Connected to => ` + JSON.stringify(sock.user, null, 2)));
 
+                // ==================== SEND WELCOME IMAGE TO BOT'S OWN CHAT ====================
                 try {
                     const botNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-                    const ghostStatus = (ghostMode && ghostMode.enabled) ? '\n👻 Stealth Mode: ACTIVE' : '';
-                    
-                    await sock.sendMessage(botNumber, {
-                        text: `🤖 REDXBOT302 Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅ Join our channel: ${settings.channelLink}`,
-                        contextInfo: {
-                            forwardingScore: 1,
-                            isForwarded: true,
-                            forwardedNewsletterMessageInfo: {
-                                newsletterJid: settings.channelJid || '120363405513439052@newsletter',
-                                newsletterName: 'REDXBOT302',
-                                serverMessageId: -1
-                            }
-                        }
-                    });
-                } catch (error) {
-                    printLog('error', `Failed to send connection message: ${error.message}`);
+                    const welcomeCaption = `╔══════『 *${settings.botName}* 』══════╗\n\n` +
+                        `✅ *Bot is now online!*\n\n` +
+                        `📌 *Prefix:* ${settings.prefixes[0]}\n` +
+                        `👑 *Owner:* ${settings.botOwner} & ${settings.secondOwner}\n` +
+                        `🔗 *Channel:* ${settings.channelLink}\n` +
+                        `📢 *Group:* ${settings.whatsappGroup}\n` +
+                        `⭐ *GitHub:* ${settings.githubRepo}\n\n` +
+                        `✨ *Thank you for using REDXBOT!* ✨`;
+
+                    const response = await axios.get(settings.botDp, { responseType: 'arraybuffer' });
+                    const buffer = Buffer.from(response.data, 'binary');
+                    await sock.sendMessage(botNumber, { image: buffer, caption: welcomeCaption });
+                    printLog('success', 'Welcome image sent to bot.');
+                } catch (err) {
+                    printLog('error', 'Failed to send welcome image:', err.message);
+                    // Fallback text
+                    try {
+                        await sock.sendMessage(botNumber, { text: `✅ ${settings.botName} is online!` });
+                    } catch (e) {}
                 }
 
                 await delay(1999);
@@ -581,20 +545,6 @@ async function startBot() {
                     } catch (error) {
                         printLog('error', `Error deleting session: ${error.message}`);
                     }
-                } else if (statusCode === 440) {
-                    printLog('error', `
-╔════════════════════════════════════════════════════════╗
-║                   ❗ CONFLICT DETECTED                   ║
-╠════════════════════════════════════════════════════════╣
-║ Another device is using this WhatsApp number.           ║
-║ The bot cannot stay connected.                          ║
-╟────────────────────────────────────────────────────────╢
-║ ✅ FIX:                                                  ║
-║ 1. Open WhatsApp on your phone.                         ║
-║ 2. Go to Settings → Linked Devices.                     ║
-║ 3. Log out from ALL devices.                            ║
-║ 4. Restart this bot.                                    ║
-╚════════════════════════════════════════════════════════╝`);
                 }
                 
                 if (shouldReconnect) {
@@ -635,7 +585,6 @@ async function startBot() {
     }
 }
 
-
 async function main() {
     printLog('info', 'Starting REDXBOT302...');
     
@@ -661,7 +610,6 @@ async function main() {
 }
 
 main();
-
 
 const customTemp = path.join(process.cwd(), 'temp');
 if (!fs.existsSync(customTemp)) fs.mkdirSync(customTemp, { recursive: true });

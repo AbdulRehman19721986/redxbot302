@@ -22,6 +22,8 @@ module.exports = {
 
         const uptime = process.uptime();
         const categories = {};
+
+        // Group commands by category
         handler.commands.forEach((plugin, cmd) => {
             const cat = plugin.category || 'misc';
             if (!categories[cat]) categories[cat] = [];
@@ -34,10 +36,12 @@ module.exports = {
         menuText += `┃ 📦 *Commands:* ${handler.commands.size}\n`;
         menuText += `┃━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
 
+        // Show all commands, no truncation
         for (const [cat, cmds] of Object.entries(categories)) {
             menuText += `┃ 🔹 *${cat.toUpperCase()}*\n`;
-            cmds.slice(0, 8).forEach(c => (menuText += `┃    ${c}\n`));
-            if (cmds.length > 8) menuText += `┃    ... +${cmds.length - 8} more\n`;
+            cmds.forEach(cmd => {
+                menuText += `┃    ${cmd}\n`;
+            });
         }
 
         menuText += `╚══════════════════════════╝\n\n`;

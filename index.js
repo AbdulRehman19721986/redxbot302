@@ -343,7 +343,7 @@ async function startBot() {
                                 forwardingScore: 1,
                                 isForwarded: true,
                                 forwardedNewsletterMessageInfo: {
-                                    newsletterJid: '120363319098372999@newsletter', // You can replace with your own channel ID
+                                    newsletterJid: '120363405513439052@newsletter', // You can replace with your own channel ID
                                     newsletterName: 'REDXBOT302',
                                     serverMessageId: -1
                                 }
@@ -491,7 +491,7 @@ async function startBot() {
                             forwardingScore: 1,
                             isForwarded: true,
                             forwardedNewsletterMessageInfo: {
-                                newsletterJid: '120363319098372999@newsletter',
+                                newsletterJid: '120363405513439052@newsletter',
                                 newsletterName: 'REDXBOT302',
                                 serverMessageId: -1
                             }
@@ -681,4 +681,5 @@ fs.watchFile(file, () => {
     printLog('info', 'index.js updated, reloading...');
     delete require.cache[file];
     require(file);
+
 });

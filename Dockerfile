@@ -10,8 +10,8 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files AND rebrand.js/datamain.txt (needed for postinstall)
+COPY package*.json rebrand.js datamain.txt ./
 
 # Remove discard-api from package.json (if present)
 RUN node -e "const fs = require('fs'); \
@@ -24,14 +24,11 @@ RUN node -e "const fs = require('fs'); \
 ENV npm_config_platform=linuxmusl
 ENV npm_config_arch=x64
 
-# Install dependencies (allow scripts to run so sharp's binary is downloaded)
+# Install dependencies (scripts will run, including postinstall which uses rebrand.js)
 RUN npm install --force --loglevel=error
 
 # Copy the rest of the application
 COPY . .
-
-# Run rebrand.js (now all files are present)
-RUN node rebrand.js
 
 EXPOSE 3000
 CMD ["npm", "start"]

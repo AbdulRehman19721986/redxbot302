@@ -52,8 +52,8 @@ const {
 const settings = require('./settings');
 const commandHandler = require('./lib/commandHandler');
 
-// ==================== GLOBAL FOOTER ====================
-const FOOTER = `\n\n✨ *Powered by Abdul Rehman Rajpoot & Muzamil Khan* ✨\n🔗 Join Channel: ${settings.channelLink}`;
+// ==================== SIMPLE FOOTER ====================
+const FOOTER = `\n\n✨ Powered by Abdul Rehman Rajpoot & Muzamil Khan`;
 
 store.readFromFile();
 setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000);
@@ -246,10 +246,10 @@ async function startBot() {
             keepAliveIntervalMs: 10000,
         });
 
-        // ==================== PATCH sendMessage TO ADD FOOTER & NEWSLETTER JID ====================
+        // ==================== PATCH sendMessage TO ADD SIMPLE FOOTER & NEWSLETTER JID ====================
         const originalSend = sock.sendMessage;
         sock.sendMessage = async function (jid, content, options = {}) {
-            // Add footer text to any text message
+            // Add simple footer to any text message (if not already present)
             if (content.text && !content.text.includes('Powered by')) {
                 content.text += FOOTER;
             }

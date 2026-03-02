@@ -27,7 +27,7 @@ module.exports = {
 
       await sock.sendMessage(chatId, { 
         image: { url: qr }, 
-        caption: `✅ QR Code Generated | ${settings.botName}`,
+        caption: `✅ QR Code Generated | ${settings.botName || 'REDXBOT'}`,
         ...channelInfo 
       }, { quoted: message });
     } catch (err) {

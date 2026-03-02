@@ -56,8 +56,7 @@ module.exports = {
     }
 
     // Footer
-    menuText += `> *© Powered by REDX BOT*\n`;
-    menuText += `📢 *Channel:* 120363405513439052@newsletter`;
+    menuText += `> *© Powered by REDX BOT*\n`
 
     // Fetch image
     let imageBuffer;

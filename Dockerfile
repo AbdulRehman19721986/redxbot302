@@ -20,13 +20,13 @@ RUN node -e "const fs = require('fs'); \
     if (pkg.devDependencies && pkg.devDependencies['discard-api']) delete pkg.devDependencies['discard-api']; \
     fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));"
 
-# Now install dependencies (discard-api is gone)
-RUN npm install --force --loglevel=error
+# Install dependencies without running scripts (postinstall will be run later)
+RUN npm install --force --loglevel=error --ignore-scripts
 
 # Copy the rest of the application (including rebrand.js and datamain.txt)
 COPY . .
 
-# Run rebranding if needed
+# Now run the postinstall script manually
 RUN node rebrand.js
 
 EXPOSE 3000

@@ -1,4 +1,5 @@
 const QRCode = require('qrcode');
+const settings = require('../settings'); // Adjust path if needed
 
 module.exports = {
   command: 'qrcode',
@@ -8,11 +9,14 @@ module.exports = {
   usage: '.qrcode <text>',
 
   async handler(sock, message, args, context = {}) {
-    const chatId = context.chatId || message.key.remoteJid;
+    const { chatId, channelInfo } = context;
     const text = args?.join(' ')?.trim();
 
     if (!text) {
-      return await sock.sendMessage(chatId, { text: '*Provide text to generate QR*\nExample: .qrcode Hello World' }, { quoted: message });
+      return await sock.sendMessage(chatId, { 
+        text: '*Provide text to generate QR*\nExample: .qrcode Hello World',
+        ...channelInfo 
+      }, { quoted: message });
     }
 
     try {
@@ -21,10 +25,17 @@ module.exports = {
         scale: 8
       });
 
-      await sock.sendMessage(chatId, { image: { url: qr }, caption: '✅ QR Code Generated' }, { quoted: message });
+      await sock.sendMessage(chatId, { 
+        image: { url: qr }, 
+        caption: `✅ QR Code Generated | ${settings.botName}`,
+        ...channelInfo 
+      }, { quoted: message });
     } catch (err) {
       console.error('QR plugin error:', err);
-      await sock.sendMessage(chatId, { text: '❌ Failed to generate QR code.' }, { quoted: message });
-    }}
+      await sock.sendMessage(chatId, { 
+        text: '❌ Failed to generate QR code.',
+        ...channelInfo 
+      }, { quoted: message });
+    }
+  }
 };
-

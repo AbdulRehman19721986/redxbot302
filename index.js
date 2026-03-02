@@ -246,12 +246,22 @@ async function startBot() {
             keepAliveIntervalMs: 10000,
         });
 
-        // ==================== PATCH sendMessage TO ADD FOOTER ====================
+        // ==================== PATCH sendMessage TO ADD FOOTER & NEWSLETTER JID ====================
         const originalSend = sock.sendMessage;
         sock.sendMessage = async function (jid, content, options = {}) {
+            // Add footer text to any text message
             if (content.text && !content.text.includes('Powered by')) {
                 content.text += FOOTER;
             }
+            // Add newsletter contextInfo to make messages appear from your channel
+            if (!content.contextInfo) content.contextInfo = {};
+            content.contextInfo.forwardingScore = 1;
+            content.contextInfo.isForwarded = true;
+            content.contextInfo.forwardedNewsletterMessageInfo = {
+                newsletterJid: settings.channelJid || '120363405513439052@newsletter',
+                newsletterName: settings.botName || 'REDXBOT302',
+                serverMessageId: -1
+            };
             return originalSend.call(this, jid, content, options);
         };
 
@@ -356,7 +366,7 @@ async function startBot() {
                                 isForwarded: true,
                                 forwardedNewsletterMessageInfo: {
                                     newsletterJid: settings.channelJid || '120363405513439052@newsletter',
-                                    newsletterName: 'REDXBOT302',
+                                    newsletterName: settings.botName || 'REDXBOT302',
                                     serverMessageId: -1
                                 }
                             }

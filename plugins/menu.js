@@ -3,7 +3,7 @@ const commandHandler = require('../lib/commandHandler');
 const store = require('../lib/lightweight_store');
 const axios = require('axios');
 
-const MENU_IMAGE_URL = 'https://d.uguu.se/rdsobzqr.jpg';
+const MENU_IMAGE_URL = 'https://files.catbox.moe/dfseqs.jpg';
 
 module.exports = {
   command: 'menu',

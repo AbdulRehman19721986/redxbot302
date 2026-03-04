@@ -1,7 +1,12 @@
 const axios = require('axios');
-const ytdl = require('ytdl-core');
 const ytSearch = require('yt-search');
 const settings = require('../settings');
+
+const API_LIST = [
+  'https://api.qasimdev.dpdns.org/api/loaderto/download?apiKey=qasim-dev&format=mp3&url=',
+  'https://api.ryzendesu.vip/api/downloader/ytmp3?url=',
+  'https://api.diioffc.web.id/api/download/ytmp3?url='
+];
 
 module.exports = {
   command: 'play2',
@@ -23,79 +28,59 @@ module.exports = {
 
     await sock.sendPresenceUpdate('composing', chatId);
 
-    // Try multiple sources in order
-    const sources = [
-      async () => {
-        // Source 1: qasimdev API
-        const searchRes = await axios.get(`https://api.qasimdev.dpdns.org/api/loaderto/search?apiKey=qasim-dev&query=${encodeURIComponent(query)}`);
-        if (searchRes.data?.length) {
-          const first = searchRes.data[0];
-          const downloadUrl = `https://api.qasimdev.dpdns.org/api/loaderto/download?apiKey=qasim-dev&format=mp3&url=${encodeURIComponent(first.url)}`;
-          const dlRes = await axios.get(downloadUrl);
-          return { title: first.title, thumbnail: first.thumbnail, audioUrl: dlRes.data.downloadUrl };
-        }
-        throw new Error('No results from API');
-      },
-      async () => {
-        // Source 2: ytdl-core (direct download, but we'll just return info and let client download? Actually we can't return buffer here, so we'll use a different approach)
-        // For simplicity, we'll just use ytdl to get a stream but we need to send audio; we'll reuse play.js logic but simplified
-        const search = await ytSearch(query);
-        if (!search.videos?.length) throw new Error('No results');
-        const video = search.videos[0];
-        const info = await ytdl.getInfo(video.url);
-        const audioStream = ytdl(info.videoDetails.video_url, { quality: 'lowestaudio', filter: 'audioonly' });
-        // We can't return a stream directly, so we'll download to buffer
-        const chunks = [];
-        for await (const chunk of audioStream) chunks.push(chunk);
-        const buffer = Buffer.concat(chunks);
-        return { title: video.title, thumbnail: video.thumbnail, buffer };
+    try {
+      // Search for video
+      const search = await ytSearch(query);
+      if (!search.videos || search.videos.length === 0) {
+        return await sock.sendMessage(chatId, {
+          text: '❌ No results found.',
+          ...channelInfo
+        }, { quoted: message });
       }
-    ];
+      const video = search.videos[0];
+      const videoUrl = video.url;
+      const title = video.title;
+      const thumbnail = video.thumbnail;
 
-    let lastError;
-    for (const source of sources) {
-      try {
-        const result = await source();
-        if (result.buffer) {
-          // Send from buffer
-          await sock.sendMessage(chatId, {
-            image: { url: result.thumbnail },
-            caption: `🎶 *${result.title}*`,
-            ...channelInfo
-          }, { quoted: message });
-
-          await sock.sendMessage(chatId, {
-            audio: result.buffer,
-            mimetype: 'audio/mpeg',
-            fileName: `${result.title.replace(/[^a-zA-Z0-9]/g, '_')}.mp3`,
-            ...channelInfo
-          }, { quoted: message });
-        } else {
-          // Send from URL
-          await sock.sendMessage(chatId, {
-            image: { url: result.thumbnail },
-            caption: `🎶 *${result.title}*`,
-            ...channelInfo
-          }, { quoted: message });
-
-          await sock.sendMessage(chatId, {
-            audio: { url: result.audioUrl },
-            mimetype: 'audio/mpeg',
-            fileName: 'song.mp3',
-            ...channelInfo
-          }, { quoted: message });
+      // Try each API
+      let audioUrl = null;
+      for (const apiBase of API_LIST) {
+        try {
+          const apiUrl = apiBase + encodeURIComponent(videoUrl);
+          const res = await axios.get(apiUrl, { timeout: 15000 });
+          if (res.data?.downloadUrl || res.data?.url || res.data?.audio) {
+            audioUrl = res.data.downloadUrl || res.data.url || res.data.audio;
+            break;
+          }
+        } catch (e) {
+          console.log(`API ${apiBase} failed:`, e.message);
         }
-        return;
-      } catch (err) {
-        lastError = err;
-        console.log('Source failed:', err.message);
       }
+
+      if (!audioUrl) {
+        throw new Error('All APIs failed');
+      }
+
+      // Send thumbnail and audio
+      await sock.sendMessage(chatId, {
+        image: { url: thumbnail },
+        caption: `🎶 *${title}*`,
+        ...channelInfo
+      }, { quoted: message });
+
+      await sock.sendMessage(chatId, {
+        audio: { url: audioUrl },
+        mimetype: 'audio/mpeg',
+        fileName: 'song.mp3',
+        ...channelInfo
+      }, { quoted: message });
+
+    } catch (error) {
+      console.error('Play2 error:', error);
+      await sock.sendMessage(chatId, {
+        text: '❌ All download sources failed. Try .play instead.',
+        ...channelInfo
+      }, { quoted: message });
     }
-
-    // All sources failed
-    await sock.sendMessage(chatId, {
-      text: '❌ All download sources failed. Try .play instead.',
-      ...channelInfo
-    }, { quoted: message });
   }
 };

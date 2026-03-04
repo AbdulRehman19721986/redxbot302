@@ -1,83 +1,110 @@
+const yts = require('yt-search');
 const axios = require('axios');
+const ytdl = require('ytdl-core');
+const settings = require('../settings');
+
+const API_LIST = [
+  'https://api.siputzx.my.id/api/d/ytmp3?url=',
+  'https://api.zenkey.my.id/api/download/ytmp3?url=',
+  'https://api.neoxr.my.id/api/ytmp3?url=',
+  'https://api.betabotz.eu.org/api/download/ytmp3?url=',
+  'https://api.vreden.web.id/api/ytmp3?url=',
+  'https://api.alandikasaputra.my.id/api/downloader/yt?url=',
+  'https://api.firda.tech/api/ytmp3?url=',
+  'https://api.agatz.xyz/api/ytmp3?url=',
+  'https://api.qasimdev.dpdns.org/api/loaderto/download?apiKey=qasim-dev&format=mp3&url=',
+  'https://api.ryzendesu.vip/api/downloader/ytmp3?url=',
+  'https://api.diioffc.web.id/api/download/ytmp3?url='
+];
 
 module.exports = {
   command: 'play3',
-  aliases: ['music3', 'song3'],
+  aliases: ['song3', 'ytmp33'],
   category: 'music',
-  description: 'Download a song as MP3 (Dhamz API)',
+  description: 'Third song downloader with additional APIs',
   usage: '.play3 <song name>',
-  
+
   async handler(sock, message, args, context) {
     const { chatId, channelInfo } = context;
     const query = args.join(' ').trim();
 
     if (!query) {
       return await sock.sendMessage(chatId, {
-        text: "❌ *Missing song name*\nExample: .play3 Believer",
+        text: '🎵 *Third Song Downloader*\n\nUsage:\n.play3 <song name>',
         ...channelInfo
       }, { quoted: message });
     }
 
-    await sock.sendMessage(chatId, {
-      text: "🔍 *Searching via Dhamz API...*",
-      ...channelInfo
-    }, { quoted: message });
-
     try {
-      // Search using Dhamz API
-      const searchUrl = `https://api.dhamzxploit.my.id/api/spotify?search=${encodeURIComponent(query)}`;
-      const searchRes = await axios.get(searchUrl, { timeout: 15000 });
-
-      if (!searchRes.data?.result?.length) {
-        throw new Error('No results');
+      const search = await yts(query);
+      if (!search.videos?.length) {
+        return await sock.sendMessage(chatId, {
+          text: '❌ No results found.',
+          ...channelInfo
+        }, { quoted: message });
       }
-
-      const track = searchRes.data.result[0];
-      const title = track.title;
-      const artist = track.artist;
-      const duration = track.duration;
-      const thumbnail = track.thumbnail;
-      const audioUrl = track.download;
+      const video = search.videos[0];
+      const videoUrl = video.url;
+      const title = video.title;
+      const thumbnail = video.thumbnail;
 
       await sock.sendMessage(chatId, {
-        text: `✅ *Found:* ${title} - ${artist}\n⏱️ *Duration:* ${duration}\n⏳ *Downloading...*`,
+        image: { url: thumbnail },
+        caption: `🎶 *${title}*`,
         ...channelInfo
       }, { quoted: message });
 
-      if (!audioUrl) {
-        throw new Error('No download link');
-      }
-
-      // Get thumbnail
-      let thumbBuffer = null;
-      if (thumbnail) {
+      let audioUrl = null;
+      for (const apiBase of API_LIST) {
         try {
-          const imgRes = await axios.get(thumbnail, { responseType: 'arraybuffer', timeout: 10000 });
-          thumbBuffer = Buffer.from(imgRes.data);
-        } catch (e) {}
+          const apiUrl = apiBase + encodeURIComponent(videoUrl);
+          const res = await axios.get(apiUrl, { timeout: 15000 });
+          const data = res.data;
+          if (typeof data === 'string' && data.startsWith('http')) {
+            audioUrl = data;
+          } else if (data?.url) {
+            audioUrl = data.url;
+          } else if (data?.downloadUrl) {
+            audioUrl = data.downloadUrl;
+          } else if (data?.result?.url) {
+            audioUrl = data.result.url;
+          } else if (data?.data?.url) {
+            audioUrl = data.data.url;
+          } else if (data?.audio) {
+            audioUrl = data.audio;
+          }
+          if (audioUrl) break;
+        } catch (e) {
+          console.log(`API ${apiBase} failed:`, e.message);
+        }
       }
 
-      // Send audio
+      if (!audioUrl) {
+        // Fallback to ytdl
+        const audioStream = ytdl(videoUrl, { quality: 'lowestaudio', filter: 'audioonly' });
+        const chunks = [];
+        for await (const chunk of audioStream) chunks.push(chunk);
+        const buffer = Buffer.concat(chunks);
+        await sock.sendMessage(chatId, {
+          audio: buffer,
+          mimetype: 'audio/mpeg',
+          fileName: `${title.replace(/[^a-zA-Z0-9]/g, '_')}.mp3`,
+          ...channelInfo
+        }, { quoted: message });
+        return;
+      }
+
       await sock.sendMessage(chatId, {
         audio: { url: audioUrl },
         mimetype: 'audio/mpeg',
-        fileName: `${title} - ${artist}.mp3`,
-        contextInfo: {
-          externalAdReply: {
-            title: title,
-            body: artist,
-            thumbnail: thumbBuffer,
-            mediaType: 2,
-            mediaUrl: audioUrl,
-            sourceUrl: audioUrl
-          }
-        }
+        fileName: 'song.mp3',
+        ...channelInfo
       }, { quoted: message });
 
     } catch (error) {
-      console.error('Play3 (Dhamz) error:', error.message);
+      console.error('Play3 error:', error);
       await sock.sendMessage(chatId, {
-        text: "❌ *Download failed*\nPlease try .play or .play2 for alternative sources.",
+        text: '❌ All download sources failed. Try .play instead.',
         ...channelInfo
       }, { quoted: message });
     }

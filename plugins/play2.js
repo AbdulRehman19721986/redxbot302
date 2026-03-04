@@ -1,87 +1,71 @@
 const axios = require('axios');
+const settings = require('../settings');
 
 module.exports = {
   command: 'play2',
-  aliases: ['music2', 'song2'],
-  category: 'music',
-  description: 'Download a song as MP3 (NeoXR API)',
+  aliases: ['song2', 'ytmp32'],
+  category: 'download',
+  description: 'Alternative download method (external API)',
   usage: '.play2 <song name>',
-  
+
   async handler(sock, message, args, context) {
     const { chatId, channelInfo } = context;
     const query = args.join(' ').trim();
 
     if (!query) {
       return await sock.sendMessage(chatId, {
-        text: "❌ *Missing song name*\nExample: .play2 Believer",
+        text: '🎵 *Alternative Song Downloader*\n\nUsage:\n.play2 <song name>',
         ...channelInfo
       }, { quoted: message });
     }
 
-    await sock.sendMessage(chatId, {
-      text: "🔍 *Searching via NeoXR...*",
-      ...channelInfo
-    }, { quoted: message });
+    await sock.sendPresenceUpdate('composing', chatId);
 
     try {
-      // Search using NeoXR API
-      const searchUrl = `https://api.neoxr.my.id/api/spotify?q=${encodeURIComponent(query)}&apikey=yourkey`; // Replace with actual key if needed
-      const searchRes = await axios.get(searchUrl, { timeout: 15000 });
-
-      if (!searchRes.data?.data?.length) {
-        throw new Error('No results');
+      // Using a free API (example: https://api.example.com/search?q=...)
+      // Replace with your preferred API endpoint
+      const searchApi = `https://some-music-api.com/search?q=${encodeURIComponent(query)}`;
+      const searchRes = await axios.get(searchApi);
+      if (!searchRes.data || !searchRes.data.length) {
+        return await sock.sendMessage(chatId, {
+          text: '❌ No results found.',
+          ...channelInfo
+        }, { quoted: message });
       }
 
-      const track = searchRes.data.data[0];
-      const title = track.title;
-      const artist = track.artist;
-      const duration = track.duration;
-      const thumbnail = track.thumbnail;
-      const spotifyUrl = track.url;
+      const first = searchRes.data[0];
+      const title = first.title;
+      const duration = first.duration;
+      const thumbnail = first.thumbnail;
+      const downloadUrl = first.downloadUrl; // assume API provides direct MP3
 
       await sock.sendMessage(chatId, {
-        text: `✅ *Found:* ${title} - ${artist}\n⏱️ *Duration:* ${duration}\n⏳ *Downloading...*`,
+        image: { url: thumbnail },
+        caption: `🎶 *${title}*\n⏱️ Duration: ${duration}`,
         ...channelInfo
       }, { quoted: message });
 
-      // Download using NeoXR download endpoint (if available)
-      // Some APIs provide direct download in search, otherwise use separate download endpoint
-      const audioUrl = track.download || track.audio; // adjust based on actual response
-
-      if (!audioUrl) {
-        throw new Error('No download link');
-      }
-
-      // Get thumbnail
-      let thumbBuffer = null;
-      if (thumbnail) {
-        try {
-          const imgRes = await axios.get(thumbnail, { responseType: 'arraybuffer', timeout: 10000 });
-          thumbBuffer = Buffer.from(imgRes.data);
-        } catch (e) {}
-      }
-
-      // Send audio
       await sock.sendMessage(chatId, {
-        audio: { url: audioUrl },
+        text: '⏳ Downloading from external source...',
+        ...channelInfo
+      }, { quoted: message });
+
+      // Download file
+      const audioRes = await axios.get(downloadUrl, { responseType: 'arraybuffer' });
+      const audioBuffer = Buffer.from(audioRes.data);
+
+      await sock.sendMessage(chatId, {
+        audio: audioBuffer,
         mimetype: 'audio/mpeg',
-        fileName: `${title} - ${artist}.mp3`,
-        contextInfo: {
-          externalAdReply: {
-            title: title,
-            body: artist,
-            thumbnail: thumbBuffer,
-            mediaType: 2,
-            mediaUrl: spotifyUrl,
-            sourceUrl: spotifyUrl
-          }
-        }
+        fileName: `${title.replace(/[^a-zA-Z0-9]/g, '_')}.mp3`,
+        ptt: false,
+        ...channelInfo
       }, { quoted: message });
 
     } catch (error) {
-      console.error('Play2 (NeoXR) error:', error.message);
+      console.error('Play2 error:', error);
       await sock.sendMessage(chatId, {
-        text: "❌ *Download failed*\nPlease try .play or .play3 for alternative sources.",
+        text: '❌ Alternative download failed. Try .play instead.',
         ...channelInfo
       }, { quoted: message });
     }

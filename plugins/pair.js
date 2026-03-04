@@ -1,93 +1,71 @@
-const axios = require('axios');
-const settings = require('../settings'); // For bot name
+const { useMultiFileAuthState, makeWASocket, fetchLatestBaileysVersion, Browsers } = require("@whiskeysockets/baileys");
+const pino = require("pino");
+const fs = require('fs');
+const path = require('path');
 
-module.exports = {
-  command: 'pair',
-  aliases: ['paircode', 'session', 'getsession', 'sessionid'],
-  category: 'general',
-  description: 'Get a WhatsApp pairing code from REDX server',
-  usage: '.pair 923009842133',
-  
-  async handler(sock, message, args, context = {}) {
-    const { chatId, channelInfo } = context;
-    const query = args.join('').trim();
-
-    if (!query) {
-      return await sock.sendMessage(chatId, {
-        text: "❌ *Missing Number*\nExample: .pair 923009842133",
-        ...channelInfo
-      }, { quoted: message });
+module.exports = [{
+  pattern: "pair",
+  alias: ["paircode", "getpair"],
+  desc: "Generate a WhatsApp pairing code for any number",
+  category: "utility",
+  react: "🔑",
+  filename: __filename,
+  use: ".pair <phone number>",
+  execute: async (conn, mek, m, { from, args, reply }) => {
+    if (!args.length) {
+      return reply("❌ Please provide a phone number.\nExample: .pair 61468259338");
     }
 
-    const number = query.replace(/[^0-9]/g, '');
-
+    const number = args[0].replace(/\D/g, '');
     if (number.length < 10 || number.length > 15) {
-      return await sock.sendMessage(chatId, {
-        text: "❌ *Invalid Format*\nPlease provide the number with country code but without + or spaces.\nExample: 923009842133",
-        ...channelInfo
-      }, { quoted: message });
+      return reply("❌ Invalid number format. Use country code without + or spaces.");
     }
 
-    await sock.sendMessage(chatId, {
-      text: "⏳ *Requesting pairing code from REDX server...*",
-      ...channelInfo
-    }, { quoted: message });
+    const tmpDir = path.join(__dirname, '../temp_pair', number);
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+
+    await reply(`⏳ Generating pairing code for +${number}...`);
 
     try {
-      // Use your REDX pairing backend
-      const response = await axios.get(`https://redxmainpair-production.up.railway.app/pair?number=${number}`, {
-        timeout: 60000
+      const { state, saveCreds } = await useMultiFileAuthState(tmpDir);
+      const { version } = await fetchLatestBaileysVersion();
+
+      const sock = makeWASocket({
+        version,
+        logger: pino({ level: 'silent' }),
+        auth: state,
+        browser: Browsers.macOS("Safari"),
+        connectTimeoutMs: 60000,
+        keepAliveIntervalMs: 25000,
+        maxIdleTimeMs: 60000,
+        maxRetries: 5,
+        markOnlineOnConnect: true,
+        emitOwnEvents: true,
+        defaultQueryTimeoutMs: 60000,
+        syncFullHistory: false
       });
 
-      // Check response format – adjust based on your backend's actual response
-      let pairingCode = null;
-      if (response.data && response.data.code) {
-        pairingCode = response.data.code;
-      } else if (response.data && typeof response.data === 'string') {
-        pairingCode = response.data.trim();
-      } else if (response.data && response.data.pairingCode) {
-        pairingCode = response.data.pairingCode;
-      }
+      // Wait a bit for the connection to initialize
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
-      if (!pairingCode || pairingCode.includes("Unavailable") || pairingCode.includes("Error")) {
-        throw new Error("Server returned an error or is busy");
-      }
+      const pairingCode = await sock.requestPairingCode(number);
 
-      const successText = `✅ *${settings.botName} PAIRING CODE*\n\n` +
-                          `Code: *${pairingCode}*\n\n` +
-                          `*How to use:*\n` +
-                          `1. Open WhatsApp Settings\n` +
-                          `2. Tap 'Linked Devices'\n` +
-                          `3. Tap 'Link a Device'\n` +
-                          `4. Select 'Link with phone number instead'\n` +
-                          `5. Enter the code above.\n\n` +
-                          `_Code expires in 5 minutes._`;
+      // Clean up temp session
+      setTimeout(() => {
+        sock.ws.close();
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }, 5000);
 
-      await sock.sendMessage(chatId, {
-        text: successText,
-        ...channelInfo
-      }, { quoted: message });
+      await conn.sendMessage(from, {
+        text: `✅ *Pairing Code for +${number}:*\n\n*${pairingCode}*\n\n_This code expires in 5 minutes. Open WhatsApp → Linked Devices → Link a Device → enter this code._`
+      }, { quoted: mek });
 
     } catch (error) {
-      console.error('Pairing Plugin Error:', error.message);
-      
-      let errorMsg = "❌ *Pairing Failed*\nReason: ";
-      if (error.code === 'ECONNABORTED') {
-        errorMsg += "Server timeout. Please try again in a minute.";
-      } else if (error.response?.status === 400) {
-        errorMsg += "Invalid phone number format.";
-      } else if (error.response?.status === 429) {
-        errorMsg += "Too many requests. Wait a minute and try again.";
-      } else if (error.response?.status === 503) {
-        errorMsg += "Server is busy. Try again later.";
-      } else {
-        errorMsg += "The server is currently offline or busy. Try again later.";
-      }
-
-      await sock.sendMessage(chatId, {
-        text: errorMsg,
-        ...channelInfo
-      }, { quoted: message });
+      console.error("Pairing error:", error);
+      await reply(`❌ Failed to generate pairing code: ${error.message}`);
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   }
-};
+}];

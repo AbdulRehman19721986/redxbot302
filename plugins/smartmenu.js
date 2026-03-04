@@ -131,14 +131,26 @@ module.exports = {
       menuText += `├─ ${slowEmoji} Slow Response\n`;
       menuText += `⁠└───────────────────`;
 
-      const messageOptions = {
+      // Prepare message: send as image if thumbnail exists, else as text
+      const messageOptions = thumbnail ? {
         image: thumbnail,
         caption: menuText,
         contextInfo: {
           forwardingScore: 1,
           isForwarded: true,
           forwardedNewsletterMessageInfo: {
-            newsletterJid: '120363319098372999@newsletter',
+            newsletterJid: '120363405513439052@newsletter',
+            newsletterName: settings.botName || 'REDXBOT302',
+            serverMessageId: -1
+          }
+        }
+      } : {
+        text: menuText,
+        contextInfo: {
+          forwardingScore: 1,
+          isForwarded: true,
+          forwardedNewsletterMessageInfo: {
+            newsletterJid: '120363405513439052@newsletter',
             newsletterName: settings.botName || 'REDXBOT302',
             serverMessageId: -1
           }

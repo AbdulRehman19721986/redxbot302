@@ -3,7 +3,7 @@ const commandHandler = require('../lib/commandHandler');
 const store = require('../lib/lightweight_store');
 const axios = require('axios');
 
-const MENU_IMAGE_URL = 'https://files.catbox.moe/dfseqs.jpg';
+const MENU_IMAGE_URL = 'https://d.uguu.se/rdsobzqr.jpg';
 
 module.exports = {
   command: 'menu',
@@ -30,16 +30,16 @@ module.exports = {
     const prefix = settings.prefixes[0];
 
     // Build header
-    let menuText = `╭┈───〔 *${settings.botName}* 〕┈───⊷\n`;
-    menuText += `├▢ 🤖 *Owner:* ${settings.botOwner} & ${settings.secondOwner}\n`;
-    menuText += `├▢ 📜 *Commands:* ${totalCommands}\n`;
-    menuText += `├▢ ⏱️ *Runtime:* ${uptimeString}\n`;
-    menuText += `├▢ 📡 *Baileys:* Multi Device\n`;
-    menuText += `├▢ ☁️ *Platform:* Railway\n`;
-    menuText += `├▢ 📦 *Prefix:* ${prefix}\n`;
-    menuText += `├▢ ⚙️ *Mode:* ${botMode}\n`;
-    menuText += `├▢ 🏷️ *Version:* ${settings.version}\n`;
-    menuText += `╰───────────────────⊷\n\n`;
+    let menuText = `╭┈┄───【 *${settings.botName}* 】───┄┈╮\n`;
+    menuText += `├■ 🤖 *Owner:* ${settings.botOwner} & ${settings.secondOwner}\n`;
+    menuText += `├■ 📜 *Commands:* ${totalCommands}\n`;
+    menuText += `├■ ⏱️ *Runtime:* ${uptimeString}\n`;
+    menuText += `├■ 📡 *Baileys:* Multi Device\n`;
+    menuText += `├■ ☁️ *Platform:* Railway\n`;
+    menuText += `├■ 📦 *Prefix:* ${prefix}\n`;
+    menuText += `├■ ⚙️ *Mode:* ${botMode}\n`;
+    menuText += `├■ 🖼️ *Version:* ${settings.version}\n`;
+    menuText += `╰───────────────┄┈╯\n\n`;
 
     // Categories
     const categories = Array.from(commandHandler.categories.keys()).sort();
@@ -48,15 +48,15 @@ module.exports = {
       if (cmdList.length === 0) continue;
 
       menuText += `『 *${cat.toUpperCase()}* 』\n`;
-      menuText += `╭───────────────────⊷\n`;
+      menuText += `╭───────────────┄┈╮\n`;
       cmdList.forEach(cmd => {
-        menuText += `┋ ⬡ *${cmd}*\n`;
+        menuText += `┋ ➜ *${cmd}*\n`;
       });
-      menuText += `╰───────────────────⊷\n\n`;
+      menuText += `╰───────────────┄┈╯\n\n`;
     }
 
     // Footer
-    menuText += `> *© Powered by REDX BOT*\n`
+    menuText += `> *© Powered by REDX BOT*\n`;
 
     // Fetch image
     let imageBuffer;

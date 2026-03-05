@@ -1,26 +1,29 @@
-// plugins/gimg.js
+// plugins/gimage.js
 const axios = require('axios');
 const settings = require('../settings');
 
+// Maximum images allowed per request to prevent abuse
+const MAX_IMAGES = 30;
+
 module.exports = {
-  command: 'gimg',
-  aliases: ['gimage', 'googleimg'],
+  command: 'gimage',
+  aliases: ['gimg', 'googleimage'],
   category: 'download',
-  description: 'Search and download images directly',
-  usage: '.gimg <search term> [number of images]',
+  description: 'Search and download multiple images',
+  usage: '.gimage <search term> [number]',
   
   async handler(sock, message, args, context) {
     const { chatId, channelInfo } = context;
     
     if (args.length === 0) {
       return await sock.sendMessage(chatId, {
-        text: '🖼️ *Google Image Downloader*\n\nUsage:\n.gimg <search term> [number]\n\nExamples:\n.gimg cute cats\n.gimg mountains 3',
+        text: '🖼️ *Google Image Downloader*\n\nUsage:\n.gimage <search term> [number]\n\nExamples:\n.gimage cute cats 10\n.gimage mountains',
         ...channelInfo
       }, { quoted: message });
     }
 
-    // Parse number of images (default 3, max 5)
-    let numImages = 3;
+    // Parse number of images
+    let numImages = 5; // default
     let query = args.join(' ');
     
     const lastArg = args[args.length - 1];
@@ -29,8 +32,13 @@ module.exports = {
       query = args.slice(0, -1).join(' ');
     }
     
-    // Limit to reasonable number
-    numImages = Math.min(Math.max(numImages, 1), 5);
+    // Enforce maximum limit
+    if (numImages > MAX_IMAGES) {
+      return await sock.sendMessage(chatId, {
+        text: `⚠️ Maximum allowed images is ${MAX_IMAGES}. Please request a lower number.`,
+        ...channelInfo
+      }, { quoted: message });
+    }
 
     await sock.sendPresenceUpdate('composing', chatId);
     await sock.sendMessage(chatId, {
@@ -55,7 +63,7 @@ module.exports = {
         }, { quoted: message });
       }
 
-      // Remove duplicates and get unique image URLs
+      // Remove duplicate URLs
       const seenUrls = new Set();
       const uniqueResults = [];
       for (const item of allResults) {
@@ -65,20 +73,23 @@ module.exports = {
         }
       }
 
-      const resultsToDownload = uniqueResults.slice(0, numImages);
+      const totalAvailable = uniqueResults.length;
+      const toDownload = Math.min(numImages, totalAvailable);
       
       await sock.sendMessage(chatId, {
-        text: `✅ Found ${uniqueResults.length} images. Downloading ${resultsToDownload.length}...`,
+        text: `✅ Found ${totalAvailable} unique images. Downloading ${toDownload}...`,
         ...channelInfo
       }, { quoted: message });
 
       // Step 2: Download and send each image
       let successCount = 0;
-      for (let i = 0; i < resultsToDownload.length; i++) {
-        const img = resultsToDownload[i];
+      const failedIndices = [];
+
+      for (let i = 0; i < toDownload; i++) {
+        const img = uniqueResults[i];
         
         try {
-          // Download image as buffer
+          // Download image as buffer with proper headers
           const imgResponse = await axios.get(img.url, {
             responseType: 'arraybuffer',
             timeout: 30000,
@@ -90,7 +101,7 @@ module.exports = {
           const imageBuffer = Buffer.from(imgResponse.data);
           
           // Send image with caption
-          const caption = `🖼️ *${query}*\n📸 Image ${i+1}/${resultsToDownload.length}\n📏 ${img.width}×${img.height}`;
+          const caption = `🖼️ *${query}*\n📸 Image ${i+1}/${toDownload}\n📏 ${img.width || '?'}×${img.height || '?'}`;
           
           await sock.sendMessage(chatId, {
             image: imageBuffer,
@@ -100,31 +111,29 @@ module.exports = {
           
           successCount++;
           
-          // Small delay between sends
-          if (i < resultsToDownload.length - 1) {
+          // Delay between sends to avoid spam
+          if (i < toDownload - 1) {
             await new Promise(resolve => setTimeout(resolve, 800));
           }
           
         } catch (imgError) {
           console.error(`Failed to download image ${i+1}:`, imgError.message);
-          // Continue to next image
+          failedIndices.push(i+1);
         }
       }
 
-      if (successCount === 0) {
-        await sock.sendMessage(chatId, {
-          text: '❌ Failed to download any images. The image sources may be unavailable.',
-          ...channelInfo
-        }, { quoted: message });
-      } else {
-        await sock.sendMessage(chatId, {
-          text: `✅ Downloaded ${successCount} image${successCount > 1 ? 's' : ''} successfully!`,
-          ...channelInfo
-        }, { quoted: message });
+      // Final summary
+      let summary = `✅ Downloaded ${successCount} image${successCount !== 1 ? 's' : ''}`;
+      if (failedIndices.length > 0) {
+        summary += `\n❌ Failed: ${failedIndices.join(', ')}`;
       }
+      await sock.sendMessage(chatId, {
+        text: summary,
+        ...channelInfo
+      }, { quoted: message });
 
     } catch (error) {
-      console.error('❌ GIMG command error:', error);
+      console.error('❌ GImage command error:', error);
       let errorMsg = '❌ Image search failed.\n';
       if (error.response) {
         errorMsg += `API returned ${error.response.status}`;

@@ -1,112 +1,191 @@
 const yts = require('yt-search');
 const axios = require('axios');
-const ytdl = require('ytdl-core');
-const settings = require('../settings');
 
-const API_LIST = [
-  'https://api.siputzx.my.id/api/d/ytmp3?url=',
-  'https://api.zenkey.my.id/api/download/ytmp3?url=',
-  'https://api.neoxr.my.id/api/ytmp3?url=',
-  'https://api.betabotz.eu.org/api/download/ytmp3?url=',
-  'https://api.vreden.web.id/api/ytmp3?url=',
-  'https://api.alandikasaputra.my.id/api/downloader/yt?url=',
-  'https://api.firda.tech/api/ytmp3?url=',
-  'https://api.agatz.xyz/api/ytmp3?url=',
-  'https://api.qasimdev.dpdns.org/api/loaderto/download?apiKey=qasim-dev&format=mp3&url=',
-  'https://api.ryzendesu.vip/api/downloader/ytmp3?url=',
-  'https://api.diioffc.web.id/api/download/ytmp3?url='
-];
+const fetchJson = async (url, options) => {
+    try {
+        options = options || {};
+        const res = await axios({
+            method: 'GET',
+            url: url,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
+            },
+            ...options,
+        });
+        return res.data;
+    } catch (err) {
+        console.error('[ ❌ ] fetchJson error:', err);
+        return err;
+    }
+};
 
+// ==================== PLAY COMMAND (ORIGINAL) ====================
 module.exports = {
-  command: 'play3',
-  aliases: ['song3', 'ytmp33'],
+  command: 'play',
+  aliases: ['song', 'mp3'],
   category: 'music',
-  description: 'Third song downloader with additional APIs',
-  usage: '.play3 <song name>',
-
-  async handler(sock, message, args, context) {
-    const { chatId, channelInfo } = context;
-    const query = args.join(' ').trim();
-
+  description: 'Stream audio from YouTube',
+  usage: '.play <song name>',
+  
+  async handler(sock, message, args) {
+    const chatId = message.key.remoteJid;
+    const query = args.join(' ');
+    
     if (!query) {
-      return await sock.sendMessage(chatId, {
-        text: '🎵 *Third Song Downloader*\n\nUsage:\n.play3 <song name>',
-        ...channelInfo
-      }, { quoted: message });
+      return await sock.sendMessage(chatId, { 
+        text: '❌ Please provide a song name!\nExample: .play Moye Moye' 
+      });
     }
 
     try {
-      const search = await yts(query);
-      if (!search.videos?.length) {
-        return await sock.sendMessage(chatId, {
-          text: '❌ No results found.',
-          ...channelInfo
-        }, { quoted: message });
+      // 1. SEARCH YOUTUBE
+      const searchResult = await yts(query);
+      const video = searchResult.videos[0];
+      
+      if (!video) {
+        return await sock.sendMessage(chatId, { 
+          text: '❌ No results found for your query.' 
+        });
       }
-      const video = search.videos[0];
-      const videoUrl = video.url;
-      const title = video.title;
-      const thumbnail = video.thumbnail;
 
+      // 2. SEND THUMBNAIL WITH INFO
+      const caption = `*🎵 ${video.title}*\n\n⏱️ Duration: ${video.timestamp}\n📢 Channel: ${video.author.name}\n\n🔄 Streaming your audio...`;
+      
+      await sock.sendMessage(chatId, { 
+        image: { url: video.thumbnail },
+        caption: caption
+      });
+
+      // 3. FETCH STREAM URL FROM API
+      const apiUrl = `https://api.qasimdev.dpdns.org/api/loaderto/download?apiKey=qasim-dev&format=mp3&url=${video.url}`;
+      const apiResponse = await fetchJson(apiUrl);
+      
+      if (!apiResponse.success || !apiResponse.data.downloadUrl) {
+        throw new Error('Failed to get stream link');
+      }
+
+      const streamUrl = apiResponse.data.downloadUrl;
+
+      // 4. STREAM DIRECTLY FROM THE URL
       await sock.sendMessage(chatId, {
-        image: { url: thumbnail },
-        caption: `🎶 *${title}*`,
-        ...channelInfo
-      }, { quoted: message });
+        audio: { url: streamUrl },
+        mimetype: 'audio/mpeg',
+        fileName: `${video.title}.mp3`
+      });
 
-      let audioUrl = null;
-      for (const apiBase of API_LIST) {
+    } catch (error) {
+      console.error('Play command error:', error);
+      await sock.sendMessage(chatId, { 
+        text: '❌ An error occurred while processing your request.\nPlease try again later.' 
+      });
+    }
+  }
+};
+
+// ==================== PLAY2 COMMAND (WITH FALLBACK URLs) ====================
+module.exports = {
+  command: 'play2',
+  aliases: ['song2', 'mp3fallback'],
+  category: 'music',
+  description: 'Stream audio from YouTube with fallback URLs',
+  usage: '.play2 <song name>',
+  
+  async handler(sock, message, args) {
+    const chatId = message.key.remoteJid;
+    const query = args.join(' ');
+    
+    if (!query) {
+      return await sock.sendMessage(chatId, { 
+        text: '❌ Please provide a song name!\nExample: .play2 Moye Moye' 
+      });
+    }
+
+    try {
+      // 1. SEARCH YOUTUBE
+      const searchResult = await yts(query);
+      const video = searchResult.videos[0];
+      
+      if (!video) {
+        return await sock.sendMessage(chatId, { 
+          text: '❌ No results found for your query.' 
+        });
+      }
+
+      // 2. SEND THUMBNAIL WITH INFO
+      const caption = `*🎵 ${video.title}*\n\n⏱️ Duration: ${video.timestamp}\n📢 Channel: ${video.author.name}\n\n🔄 Streaming with fallback URLs...`;
+      
+      await sock.sendMessage(chatId, { 
+        image: { url: video.thumbnail },
+        caption: caption
+      });
+
+      // 3. FETCH STREAM URLS FROM API
+      const apiUrl = `https://api.qasimdev.dpdns.org/api/loaderto/download?apiKey=qasim-dev&format=mp3&url=${video.url}`;
+      const apiResponse = await fetchJson(apiUrl);
+      
+      if (!apiResponse.success) {
+        throw new Error('Failed to get stream links');
+      }
+
+      // 4. COLLECT ALL URLs TO TRY (main + alternatives)
+      const urlsToTry = [];
+      
+      // Add main downloadUrl if exists
+      if (apiResponse.data.downloadUrl) {
+        urlsToTry.push(apiResponse.data.downloadUrl);
+      }
+      
+      // Add all alternative URLs
+      if (apiResponse.data.alternativeUrls && apiResponse.data.alternativeUrls.length > 0) {
+        apiResponse.data.alternativeUrls.forEach(alt => {
+          urlsToTry.push(alt.url);
+        });
+      }
+
+      if (urlsToTry.length === 0) {
+        throw new Error('No URLs available to try');
+      }
+
+      // 5. TRY EACH URL UNTIL ONE WORKS
+      let success = false;
+      let lastError = null;
+
+      for (let i = 0; i < urlsToTry.length; i++) {
+        const url = urlsToTry[i];
+        
         try {
-          const apiUrl = apiBase + encodeURIComponent(videoUrl);
-          const res = await axios.get(apiUrl, { timeout: 15000 });
-          const data = res.data;
-          if (typeof data === 'string' && data.startsWith('http')) {
-            audioUrl = data;
-          } else if (data?.url) {
-            audioUrl = data.url;
-          } else if (data?.downloadUrl) {
-            audioUrl = data.downloadUrl;
-          } else if (data?.result?.url) {
-            audioUrl = data.result.url;
-          } else if (data?.data?.url) {
-            audioUrl = data.data.url;
-          } else if (data?.audio) {
-            audioUrl = data.audio;
-          }
-          if (audioUrl) break;
-        } catch (e) {
-          console.log(`API ${apiBase} failed:`, e.message);
+          console.log(`Trying URL ${i + 1}/${urlsToTry.length}: ${url}`);
+          
+          // Test if URL is accessible (quick head request)
+          await axios.head(url, { timeout: 5000 });
+          
+          // If successful, send the audio
+          await sock.sendMessage(chatId, {
+            audio: { url: url },
+            mimetype: 'audio/mpeg',
+            fileName: `${video.title}.mp3`
+          });
+          
+          success = true;
+          console.log(`✅ Success with URL ${i + 1}`);
+          break; // Exit loop if successful
+          
+        } catch (err) {
+          console.log(`❌ URL ${i + 1} failed:`, err.message);
+          lastError = err;
+          // Continue to next URL
         }
       }
 
-      if (!audioUrl) {
-        // Fallback to ytdl
-        const audioStream = ytdl(videoUrl, { quality: 'lowestaudio', filter: 'audioonly' });
-        const chunks = [];
-        for await (const chunk of audioStream) chunks.push(chunk);
-        const buffer = Buffer.concat(chunks);
-        await sock.sendMessage(chatId, {
-          audio: buffer,
-          mimetype: 'audio/mpeg',
-          fileName: `${title.replace(/[^a-zA-Z0-9]/g, '_')}.mp3`,
-          ...channelInfo
-        }, { quoted: message });
-        return;
+      if (!success) {
+        throw new Error(`All ${urlsToTry.length} URLs failed. Last error: ${lastError?.message}`);
       }
 
-      await sock.sendMessage(chatId, {
-        audio: { url: audioUrl },
-        mimetype: 'audio/mpeg',
-        fileName: 'song.mp3',
-        ...channelInfo
-      }, { quoted: message });
-
     } catch (error) {
-      console.error('Play3 error:', error);
-      await sock.sendMessage(chatId, {
-        text: '❌ All download sources failed. Try .play instead.',
-        ...channelInfo
-      }, { quoted: message });
+      console.error('Play2 command error:', error);
+      await sock.sendMessage(chatId, { 
+        text: '❌ An error occurred while processing your request.\nAll available URLs failed.' 
+      });
     }
   }
 };

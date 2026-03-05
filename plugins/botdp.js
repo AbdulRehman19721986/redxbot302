@@ -12,7 +12,9 @@ module.exports = {
   async handler(sock, message, args, context) {
     // Only allow the bot's own messages
     if (!message.key.fromMe) {
-      return;
+      return await sock.sendMessage(message.key.remoteJid, {
+        text: '❌ This command can only be used by the bot itself.'
+      }, { quoted: message });
     }
 
     const { chatId } = context;
@@ -21,19 +23,29 @@ module.exports = {
     // Check if replying to an image
     const quoted = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
     if (quoted?.imageMessage) {
-      const stream = await downloadContentFromMessage(quoted.imageMessage, 'image');
-      const chunks = [];
-      for await (const chunk of stream) chunks.push(chunk);
-      imageBuffer = Buffer.concat(chunks);
+      try {
+        const stream = await downloadContentFromMessage(quoted.imageMessage, 'image');
+        const chunks = [];
+        for await (const chunk of stream) chunks.push(chunk);
+        imageBuffer = Buffer.concat(chunks);
+      } catch (e) {
+        return await sock.sendMessage(chatId, {
+          text: `❌ Failed to download image: ${e.message}`
+        }, { quoted: message });
+      }
     }
     // Check if URL provided
     else if (args[0] && (args[0].startsWith('http://') || args[0].startsWith('https://'))) {
       try {
-        const response = await axios.get(args[0], { responseType: 'arraybuffer' });
+        const response = await axios.get(args[0], { 
+          responseType: 'arraybuffer',
+          timeout: 10000,
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
         imageBuffer = Buffer.from(response.data);
-      } catch {
+      } catch (e) {
         return await sock.sendMessage(chatId, {
-          text: '❌ Failed to fetch image from URL.'
+          text: `❌ Failed to fetch image from URL: ${e.message}`
         }, { quoted: message });
       }
     }
@@ -44,14 +56,15 @@ module.exports = {
     }
 
     try {
+      // Update bot's own profile picture
       await sock.updateProfilePicture(sock.user.id, imageBuffer);
       await sock.sendMessage(chatId, {
-        text: '✅ Profile picture updated successfully!'
+        text: '✅ Bot profile picture updated successfully!'
       }, { quoted: message });
     } catch (error) {
       console.error('BotDP error:', error);
       await sock.sendMessage(chatId, {
-        text: `❌ Failed: ${error.message}`
+        text: `❌ Failed to update profile picture:\n${error.message}`
       }, { quoted: message });
     }
   }

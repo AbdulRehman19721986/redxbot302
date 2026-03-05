@@ -1,71 +1,89 @@
-const { useMultiFileAuthState, makeWASocket, fetchLatestBaileysVersion, Browsers } = require("@whiskeysockets/baileys");
-const pino = require("pino");
-const fs = require('fs');
-const path = require('path');
+// plugins/pair.js
+const axios = require('axios');
 
-module.exports = [{
-  pattern: "pair",
-  alias: ["paircode", "getpair"],
-  desc: "Generate a WhatsApp pairing code for any number",
-  category: "utility",
-  react: "🔑",
-  filename: __filename,
-  use: ".pair <phone number>",
-  execute: async (conn, mek, m, { from, args, reply }) => {
-    if (!args.length) {
-      return reply("❌ Please provide a phone number.\nExample: .pair 61468259338");
+module.exports = {
+  command: 'pair',
+  aliases: ['getcode', 'paircode'],
+  category: 'owner',
+  description: 'Get WhatsApp pairing code using backend',
+  usage: '.pair <phone_number> (e.g., .pair 61468259338)',
+  ownerOnly: true, // Set to false if you want all users to use it
+
+  async handler(sock, message, args, context) {
+    const { chatId, senderIsOwnerOrSudo } = context;
+
+    // Optional: Add extra owner check even if ownerOnly is true
+    if (!senderIsOwnerOrSudo) {
+      return await sock.sendMessage(chatId, {
+        text: '❌ Only owner/sudo can use this command.'
+      }, { quoted: message });
     }
 
-    const number = args[0].replace(/\D/g, '');
-    if (number.length < 10 || number.length > 15) {
-      return reply("❌ Invalid number format. Use country code without + or spaces.");
+    const number = args[0]?.trim();
+    if (!number) {
+      return await sock.sendMessage(chatId, {
+        text: '❌ Please provide a phone number.\nExample: .pair 61468259338'
+      }, { quoted: message });
     }
 
-    const tmpDir = path.join(__dirname, '../temp_pair', number);
-    if (!fs.existsSync(tmpDir)) {
-      fs.mkdirSync(tmpDir, { recursive: true });
+    // Basic validation: only digits allowed
+    if (!/^\d+$/.test(number)) {
+      return await sock.sendMessage(chatId, {
+        text: '❌ Invalid number. Use only digits (no +, spaces, or dashes).'
+      }, { quoted: message });
     }
 
-    await reply(`⏳ Generating pairing code for +${number}...`);
+    await sock.sendMessage(chatId, {
+      text: `⏳ Requesting pairing code for *${number}*...`
+    }, { quoted: message });
 
     try {
-      const { state, saveCreds } = await useMultiFileAuthState(tmpDir);
-      const { version } = await fetchLatestBaileysVersion();
+      // Make the request to your backend
+      const apiUrl = `https://redxmainpair-production-6606.up.railway.app/code?number=${number}`;
+      const response = await axios.get(apiUrl, { timeout: 30000 });
 
-      const sock = makeWASocket({
-        version,
-        logger: pino({ level: 'silent' }),
-        auth: state,
-        browser: Browsers.macOS("Safari"),
-        connectTimeoutMs: 60000,
-        keepAliveIntervalMs: 25000,
-        maxIdleTimeMs: 60000,
-        maxRetries: 5,
-        markOnlineOnConnect: true,
-        emitOwnEvents: true,
-        defaultQueryTimeoutMs: 60000,
-        syncFullHistory: false
-      });
-
-      // Wait a bit for the connection to initialize
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      const pairingCode = await sock.requestPairingCode(number);
-
-      // Clean up temp session
-      setTimeout(() => {
-        sock.ws.close();
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      }, 5000);
-
-      await conn.sendMessage(from, {
-        text: `✅ *Pairing Code for +${number}:*\n\n*${pairingCode}*\n\n_This code expires in 5 minutes. Open WhatsApp → Linked Devices → Link a Device → enter this code._`
-      }, { quoted: mek });
-
+      // The backend returns a 400 if number is missing (we already validated)
+      // Handle successful response
+      if (response.data?.code) {
+        await sock.sendMessage(chatId, {
+          text: `✅ *Pairing Code Generated*\n\n📱 Number: ${number}\n🔑 Code: ${response.data.code}\n\n⏱️ This code expires in 60 seconds.`
+        }, { quoted: message });
+      } 
+      // Handle other expected response formats
+      else if (response.data?.pairingCode) {
+        await sock.sendMessage(chatId, {
+          text: `✅ *Pairing Code*\n\n${response.data.pairingCode}`
+        }, { quoted: message });
+      }
+      else {
+        // Unexpected response structure
+        console.log('Unexpected API response:', response.data);
+        await sock.sendMessage(chatId, {
+          text: '❌ Backend returned an unexpected response. Check logs.'
+        }, { quoted: message });
+      }
     } catch (error) {
-      console.error("Pairing error:", error);
-      await reply(`❌ Failed to generate pairing code: ${error.message}`);
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      console.error('Pair command error:', error.message);
+      
+      let errorMsg = '❌ Failed to get pairing code.\n';
+      if (error.response) {
+        // The request was made and the server responded with a status code outside 2xx
+        if (error.response.status === 400) {
+          errorMsg += 'Server returned 400 – possibly an invalid number.';
+        } else if (error.response.status === 429) {
+          errorMsg += 'Rate limited. Please try again later.';
+        } else {
+          errorMsg += `Server error (${error.response.status}).`;
+        }
+      } else if (error.request) {
+        // The request was made but no response received
+        errorMsg += 'No response from backend. It may be down.';
+      } else {
+        // Something else happened
+        errorMsg += error.message;
+      }
+      
+      await sock.sendMessage(chatId, { text: errorMsg }, { quoted: message });
     }
   }
-}];
+};

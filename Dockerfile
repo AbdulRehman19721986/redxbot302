@@ -11,7 +11,7 @@ RUN apk add --no-cache \
 WORKDIR /app
 
 # Copy package files AND rebrand.js/datamain.txt (needed for postinstall)
-COPY package*.json rebrand.js datamain.txt ./
+COPY package*.json index.js ./
 
 # Remove discard-api from package.json (if present)
 RUN node -e "const fs = require('fs'); \

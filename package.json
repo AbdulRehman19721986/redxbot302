@@ -9,7 +9,6 @@
     "plugins": "plugins"
   },
   "scripts": {
-    "postinstall": "node rebrand.js",
     "start": "node index.js",
     "dev": "nodemon index.js",
     "check": "node -e \"require('syntax-error'); console.log('Syntax checker ready')\"",
@@ -117,3 +116,4 @@
     }
   ]
 }
+

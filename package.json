@@ -78,7 +78,6 @@
     "node-youtube-music": "^0.8.3",
     "performance-now": "^2.1.0",
     "pg": "^8.16.3",
-    "pinterest-downloader": "^1.0.6",
     "qrcode": "^1.5.4",
     "ruhend-scraper": "^9.0.8",
     "sharp": "^0.32.6",

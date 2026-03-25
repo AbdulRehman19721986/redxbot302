@@ -13,11 +13,17 @@ WORKDIR /app
 # Copy only package.json (and package-lock.json if present)
 COPY package*.json ./
 
-# Remove any problematic dependency (if needed)
+# Remove problematic dependencies that are unavailable or cause issues
 RUN node -e "const fs = require('fs'); \
     const pkg = JSON.parse(fs.readFileSync('package.json')); \
-    if (pkg.dependencies && pkg.dependencies['discard-api']) delete pkg.dependencies['discard-api']; \
-    if (pkg.devDependencies && pkg.devDependencies['discard-api']) delete pkg.devDependencies['discard-api']; \
+    if (pkg.dependencies) { \
+        delete pkg.dependencies['discard-api']; \
+        delete pkg.dependencies['pinterest-downloader']; \
+    } \
+    if (pkg.devDependencies) { \
+        delete pkg.devDependencies['discard-api']; \
+        delete pkg.devDependencies['pinterest-downloader']; \
+    } \
     fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));"
 
 # Set environment variables for sharp (if needed)

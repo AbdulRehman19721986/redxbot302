@@ -13,7 +13,7 @@
     "OWNER_NUMBER": {
       "description": "Your WhatsApp number (without +)",
       "required": true,
-      "value": "61468259338"
+      "value": "3009842133"
     },
     "BOT_NAME": {
       "description": "Bot name",
@@ -29,7 +29,7 @@
   "buildpacks": [
     { "url": "heroku/nodejs" },
     { "url": "https://github.com/DuckyTeam/heroku-buildpack-imagemagick.git" },
-    { "url": "https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest" },
+    { "url": "https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest.git" },
     { "url": "https://github.com/clhuang/heroku-buildpack-webp-binaries.git" }
   ],
   "formation": {

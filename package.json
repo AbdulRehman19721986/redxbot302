@@ -1,7 +1,7 @@
 {
   "name": "redxbot302",
-  "version": "5.2.0",
-  "description": "REDXBOT302 – Advanced WhatsApp Bot by Abdul Rehman Rajpoot",
+  "version": "10.0.0",
+  "description": "REDXBOT302 – Advanced WhatsApp Bot (Final Fixed Version)",
   "main": "index.js",
   "directories": {
     "lib": "lib",
@@ -9,46 +9,26 @@
     "plugins": "plugins"
   },
   "scripts": {
-    "start": "pm2 start index.js --deep-monitoring --attach --name redxbot302",
-    "stop": "pm2 stop redxbot302",
-    "restart": "pm2 restart redxbot302",
-    "node": "node index.js",
-    "dev": "nodemon index.js",
-    "check": "node -e \"require('syntax-error'); console.log('Syntax checker ready')\"",
-    "lint": "node test.js",
-    "start:optimized": "node --max-old-space-size=512 --optimize-for-size --gc-interval=100 index.js",
+    "start": "node index.js",
+    "pm2": "pm2-runtime start index.js --name redxbot302",
     "cleanup": "node cleanup.js",
-    "reset-session": "node reset-session.js",
-    "start:clean": "npm run cleanup && npm run start:optimized",
     "install:panel": "npm install --legacy-peer-deps",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
     "whatsapp-bot",
-    "whatsapp-api",
     "baileys-bot",
-    "redxbot302",
-    "multi-device",
-    "redx",
-    "khan-md"
+    "redxbot302"
   ],
-  "homepage": "https://github.com/AbdulRehman19721986/redxbot302",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/AbdulRehman19721986/redxbot302.git"
-  },
-  "bugs": {
-    "url": "https://github.com/AbdulRehman19721986/redxbot302/issues"
-  },
-  "license": "MIT",
   "author": "Abdul Rehman Rajpoot",
+  "license": "MIT",
   "dependencies": {
     "@adiwajshing/keyed-db": "^0.2.4",
     "@distube/ytdl-core": "^4.15.8",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@hapi/boom": "^10.0.1",
     "@vitalets/google-translate-api": "^9.2.1",
-    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "@whiskeysockets/baileys": "7.0.0-rc.9",
     "acrcloud": "^1.4.0",
     "adm-zip": "^0.5.16",
     "api-qasim": "^3.2.10",
@@ -88,7 +68,6 @@
     "performance-now": "^2.1.0",
     "pg": "^8.16.3",
     "pino": "^9.7.0",
-    "pinterest-downloader": "^1.0.6",
     "pm2": "^6.0.8",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
@@ -103,35 +82,7 @@
     "yt-search": "^2.13.1",
     "ytdl-core": "^4.11.5"
   },
-  "overrides": {
-    "wa-sticker-formatter": {
-      "sharp": "$sharp",
-      "axios": "$axios",
-      "fluent-ffmpeg": "$fluent-ffmpeg",
-      "file-type": "$file-type",
-      "fs-extra": "$fs-extra",
-      "node-webpmux": "$node-webpmux"
-    },
-    "gtts": {
-      "request": {
-        "form-data": "^4.0.1",
-        "qs": "^6.14.1",
-        "tough-cookie": "^4.1.3"
-      }
-    },
-    "jimp": "latest"
-  },
   "engines": {
-    "node": ">=20.0.0"
-  },
-  "contributors": [
-    {
-      "name": "Abdul Rehman Rajpoot",
-      "role": "Lead Developer"
-    },
-    {
-      "name": "Abdul Rehman Rajpoot",
-      "role": "Logic Contributor"
-    }
-  ]
+    "node": "24.x"
+  }
 }

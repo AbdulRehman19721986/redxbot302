@@ -1,7 +1,7 @@
 {
   "name": "redxbot302",
-  "version": "10.0.0",
-  "description": "REDXBOT302 – Auto-FFmpeg System Enabled",
+  "version": "10.0.1",
+  "description": "REDXBOT302 – Advanced WhatsApp Bot",
   "main": "index.js",
   "directories": {
     "lib": "lib",
@@ -13,7 +13,7 @@
     "pm2": "pm2-runtime start index.js --name redxbot302",
     "cleanup": "node cleanup.js",
     "install:panel": "npm install --legacy-peer-deps",
-    "postinstall": "node -e \"const fs=require('fs'); const path=require('path'); const ffmpegStatic=require('ffmpeg-static'); if(ffmpegStatic && fs.existsSync(ffmpegStatic)) { fs.chmodSync(ffmpegStatic, '755'); const binDir='/app/bin'; if(!fs.existsSync(binDir)) fs.mkdirSync(binDir,{recursive:true}); const symlink=path.join(binDir,'ffmpeg'); try{fs.unlinkSync(symlink)}catch(e){}; fs.symlinkSync(ffmpegStatic, symlink); console.log('✅ FFmpeg symlinked to',symlink); } else { console.warn('⚠️ ffmpeg-static not found'); }\"",
+    "postinstall": "node -e \"const fs=require('fs'); const path=require('path'); const ffmpegStatic=require('ffmpeg-static'); if(ffmpegStatic && fs.existsSync(ffmpegStatic)) { fs.chmodSync(ffmpegStatic, '755'); console.log('✅ FFmpeg binary ready'); } else { console.warn('⚠️ ffmpeg-static not found'); }\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

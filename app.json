@@ -7,7 +7,7 @@
     "SESSION_ID": {
       "description": "Put your session id here (from https://redxpair3.vercel.app)",
       "required": true,
-      "value": ""
+      "value": "92YlwZha#bTnxPS2VndxxeoW2PkstrkFVTJ70BOaIC2luXZyY3H0"
     },
     "OWNER_NUMBER": {
       "description": "Your WhatsApp number (without +)",
